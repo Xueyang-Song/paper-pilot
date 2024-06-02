@@ -1,0 +1,1 @@
+{"name":"paper-pilot","version":"0.0.0","type":"module","private":true,"scripts":{"dev":"vite","build":"tsc && vite build"},"dependencies":{"@vitejs/plugin-react":"latest","vite":"latest","typescript":"latest","react":"latest","react-dom":"latest","electron":"latest"},"devDependencies":{}}
