@@ -4,3 +4,5 @@
 - Crossref is useful but noisy
 - Google Scholar needs to be treated carefully
 - PubMed and arXiv should be separate connectors
+
+- 2024-06-06 checked first paper notes and saved messy crawler notes.
