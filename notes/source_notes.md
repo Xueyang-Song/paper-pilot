@@ -6,3 +6,5 @@
 - PubMed and arXiv should be separate connectors
 
 - 2024-06-06 checked first paper notes and saved messy crawler notes.
+
+- 2024-06-09 checked source list mess and saved messy crawler notes.
