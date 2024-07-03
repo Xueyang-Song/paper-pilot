@@ -16,3 +16,5 @@
 - 2024-06-26 checked crawler scratch and saved messy crawler notes.
 
 - 2024-06-27 checked rough electron shell and saved messy crawler notes.
+
+- 2024-07-02 checked first paper notes and saved messy crawler notes.
