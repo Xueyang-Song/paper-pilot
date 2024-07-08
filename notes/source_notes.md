@@ -22,3 +22,5 @@
 - 2024-07-04 checked source list mess and saved messy crawler notes.
 
 - 2024-07-06 checked openalex try and saved messy crawler notes.
+
+- 2024-07-07 checked crossref notes and saved messy crawler notes.
