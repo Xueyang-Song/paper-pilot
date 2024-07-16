@@ -26,3 +26,5 @@
 - 2024-07-07 checked crossref notes and saved messy crawler notes.
 
 - 2024-07-13 checked crawler scratch and saved messy crawler notes.
+
+- 2024-07-15 checked rough electron shell and saved messy crawler notes.
