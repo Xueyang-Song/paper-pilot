@@ -1,0 +1,10 @@
+node_modules
+dist
+dist-electron
+release
+.vite
+coverage
+*.log
+*.db
+*.db-shm
+*.db-wal
