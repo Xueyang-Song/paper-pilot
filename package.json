@@ -1,1 +1,74 @@
-{"name":"paper-pilot","version":"0.0.0","type":"module","private":true,"scripts":{"dev":"vite","build":"tsc && vite build"},"dependencies":{"@vitejs/plugin-react":"latest","vite":"latest","typescript":"latest","react":"latest","react-dom":"latest","electron":"latest"},"devDependencies":{}}
+{
+  "name": "paper-pilot",
+  "version": "0.1.0",
+  "description": "A local-first Electron research assistant for crawling papers and generating AI-backed scientific insights.",
+  "private": true,
+  "type": "module",
+  "main": "dist-electron/main/index.js",
+  "scripts": {
+    "dev": "concurrently -k \"vite --host 127.0.0.1\" \"npm:dev:electron\"",
+    "dev:electron": "wait-on http://127.0.0.1:5173 && npm run build:electron && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron .",
+    "build": "npm run typecheck && npm run build:electron && vite build",
+    "build:electron": "tsc -p tsconfig.electron.json",
+    "typecheck": "tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.electron.json",
+    "test": "vitest run",
+    "start": "electron .",
+    "package": "npm run build && electron-builder"
+  },
+  "build": {
+    "appId": "science.paperpilot.app",
+    "productName": "Paper Pilot",
+    "npmRebuild": false,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "**/*.node"
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "mac": {
+      "target": "dmg"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.90.12",
+    "fast-xml-parser": "^5.3.2",
+    "framer-motion": "^12.23.24",
+    "jotai": "^2.15.1",
+    "lucide-react": "^0.562.0",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "sqlite-vec": "^0.1.9",
+    "zod": "^4.2.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.18",
+    "@testing-library/react": "^16.3.1",
+    "@types/node": "^24.10.2",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.2",
+    "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
+    "electron": "42.0.0",
+    "electron-builder": "^26.0.12",
+    "jsdom": "^27.3.0",
+    "typescript": "^5.9.3",
+    "vite": "^8.0.10",
+    "vitest": "^4.0.16",
+    "wait-on": "^9.0.3"
+  },
+  "engines": {
+    "node": ">=22.18.0"
+  }
+}
