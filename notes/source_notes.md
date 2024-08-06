@@ -38,3 +38,5 @@
 - 2024-07-28 checked openalex try and saved messy crawler notes.
 
 - 2024-08-04 checked crawler scratch and saved messy crawler notes.
+
+- 2024-08-05 checked rough electron shell and saved messy crawler notes.
