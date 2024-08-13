@@ -44,3 +44,5 @@
 - 2024-08-06 checked project idea cleanup and saved messy crawler notes.
 
 - 2024-08-11 checked first paper notes and saved messy crawler notes.
+
+- 2024-08-12 checked source list mess and saved messy crawler notes.
