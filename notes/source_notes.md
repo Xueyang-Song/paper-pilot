@@ -46,3 +46,5 @@
 - 2024-08-11 checked first paper notes and saved messy crawler notes.
 
 - 2024-08-12 checked source list mess and saved messy crawler notes.
+
+- 2024-08-13 checked openalex try and saved messy crawler notes.
