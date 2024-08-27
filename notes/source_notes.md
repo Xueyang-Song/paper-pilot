@@ -54,3 +54,5 @@
 - 2024-08-22 checked crawler scratch and saved messy crawler notes.
 
 - 2024-08-24 checked rough electron shell and saved messy crawler notes.
+
+- 2024-08-26 checked project idea cleanup and saved messy crawler notes.
