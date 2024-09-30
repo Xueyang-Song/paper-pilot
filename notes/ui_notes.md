@@ -14,3 +14,5 @@
 - 2024-09-25 project rail try for the desktop shell.
 
 - 2024-09-28 chat ui rough for the desktop shell.
+
+- 2024-09-29 artifact idea for the desktop shell.
