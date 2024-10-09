@@ -20,3 +20,5 @@
 - 2024-10-02 paper dedupe fix for the desktop shell.
 
 - 2024-10-05 crawl job notes for the desktop shell.
+
+- 2024-10-08 sqlite start for the desktop shell.
