@@ -1,0 +1,214 @@
+import type { ChatResponse, CrawlConfig, SourceId } from "../../shared/schemas.js";
+import type { PaperPilotDb } from "../db.js";
+import type { SourceRegistry } from "../sources/registry.js";
+import type { AiService } from "./ai-service.js";
+import type { CrawlService } from "./crawl-service.js";
+import type { JobQueue } from "./job-queue.js";
+
+interface OllamaToolCall {
+  id?: string;
+  function: {
+    name: string;
+    arguments?: Record<string, unknown>;
+  };
+}
+
+interface OllamaMessage {
+  role: "system" | "user" | "assistant" | "tool";
+  content: string;
+  tool_calls?: OllamaToolCall[];
+  tool_name?: string;
+}
+
+interface OllamaResponse {
+  message?: OllamaMessage;
+}
+
+export class LocalAgentService {
+  constructor(
+    private readonly db: PaperPilotDb,
+    private readonly registry: SourceRegistry,
+    private readonly crawl: CrawlService,
+    private readonly ai: AiService,
+    private readonly jobs: JobQueue,
+    private readonly options: { model?: string; baseUrl?: string } = {}
+  ) {}
+
+  async available(): Promise<boolean> {
+    try {
+      const response = await fetch(`${this.baseUrl()}/api/tags`, { signal: AbortSignal.timeout(1500) });
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  async run(projectId: string, content: string): Promise<{ content: string; response: ChatResponse }> {
+    const messages: OllamaMessage[] = [
+      {
+        role: "system",
+        content: [
+          "You are Paper Pilot, a local-first scientific research agent.",
+          "Use tools whenever a user asks to crawl, search the corpus, list project data, or create a research brief.",
+          "External crawl and script tools may return waiting-approval; never claim they finished unless the tool result says completed.",
+          "Keep final answers concise and cite artifacts or papers when available."
+        ].join(" ")
+      },
+      { role: "user", content }
+    ];
+
+    let finalContent = "";
+    for (let turn = 0; turn < 5; turn += 1) {
+      const message = await this.chat(messages);
+      const toolCalls = message.tool_calls ?? [];
+      if (!toolCalls.length) {
+        finalContent = message.content || "I’m ready to continue with the project.";
+        break;
+      }
+      messages.push({
+        role: "assistant",
+        content: message.content ?? "",
+        tool_calls: toolCalls
+      });
+      for (const toolCall of toolCalls) {
+        const result = await this.executeTool(projectId, toolCall.function.name, toolCall.function.arguments ?? {});
+        messages.push({
+          role: "tool",
+          tool_name: toolCall.function.name,
+          content: JSON.stringify(result).slice(0, 12000)
+        });
+      }
+    }
+
+    if (!finalContent) {
+      finalContent = "I used the available project tools and updated the workspace.";
+    }
+    const project = this.db.getProject(projectId);
+    if (!project) throw new Error(`Project not found: ${projectId}`);
+    return {
+      content: finalContent,
+      response: {
+        project,
+        messages: this.db.listMessages(projectId),
+        jobs: this.jobs.list(projectId),
+        artifacts: this.db.listArtifacts(projectId)
+      }
+    };
+  }
+
+  private async chat(messages: OllamaMessage[]): Promise<OllamaMessage> {
+    const response = await fetch(`${this.baseUrl()}/api/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: this.options.model ?? "qwen2.5:0.5b",
+        stream: false,
+        messages,
+        tools: this.tools()
+      })
+    });
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "");
+      throw new Error(`Ollama agent request failed ${response.status}: ${detail.slice(0, 300)}`);
+    }
+    const data = (await response.json()) as OllamaResponse;
+    return data.message ?? { role: "assistant", content: "" };
+  }
+
+  private async executeTool(projectId: string, name: string, args: Record<string, unknown>): Promise<unknown> {
+    if (name === "list_sources") {
+      return { sources: this.registry.list() };
+    }
+    if (name === "list_project_state") {
+      return {
+        project: this.db.getProject(projectId),
+        papers: this.db.listPapers(projectId).slice(0, 20),
+        artifacts: this.db.listArtifacts(projectId).slice(0, 20),
+        jobs: this.jobs.list(projectId)
+      };
+    }
+    if (name === "search_corpus") {
+      const query = String(args.query ?? "");
+      return { chunks: this.db.hybridSearchChunks(projectId, query, 8) };
+    }
+    if (name === "run_crawl") {
+      const config: Partial<CrawlConfig> = {
+        topic: String(args.topic ?? this.db.getProject(projectId)?.topic ?? "scientific literature"),
+        maxPapers: typeof args.maxPapers === "number" ? args.maxPapers : 10,
+        sourceIds: Array.isArray(args.sourceIds) ? (args.sourceIds as SourceId[]) : undefined,
+        allowBrowserFallback: Boolean(args.allowBrowserFallback)
+      };
+      return this.crawl.runCrawl(projectId, config, { approved: false });
+    }
+    if (name === "generate_research_brief") {
+      return this.ai.generateResearchBrief(projectId, String(args.prompt ?? "Generate a research brief."));
+    }
+    return { error: `Unknown tool: ${name}` };
+  }
+
+  private tools(): unknown[] {
+    return [
+      {
+        type: "function",
+        function: {
+          name: "list_sources",
+          description: "List configured scholarly sources and their capabilities.",
+          parameters: { type: "object", properties: {}, required: [] }
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: "list_project_state",
+          description: "List current project metadata, papers, artifacts, and jobs.",
+          parameters: { type: "object", properties: {}, required: [] }
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: "search_corpus",
+          description: "Search indexed project artifacts and paper digests.",
+          parameters: {
+            type: "object",
+            properties: { query: { type: "string" } },
+            required: ["query"]
+          }
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: "run_crawl",
+          description: "Prepare or run an approved scholarly source crawl according to project policy.",
+          parameters: {
+            type: "object",
+            properties: {
+              topic: { type: "string" },
+              maxPapers: { type: "number" },
+              sourceIds: { type: "array", items: { type: "string" } },
+              allowBrowserFallback: { type: "boolean" }
+            },
+            required: ["topic"]
+          }
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: "generate_research_brief",
+          description: "Generate a citation-backed research brief from the project corpus.",
+          parameters: {
+            type: "object",
+            properties: { prompt: { type: "string" } },
+            required: ["prompt"]
+          }
+        }
+      }
+    ];
+  }
+
+  private baseUrl(): string {
+    return (this.options.baseUrl ?? "http://127.0.0.1:11434").replace(/\/$/, "");
+  }
+}
