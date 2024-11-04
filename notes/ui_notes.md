@@ -12,3 +12,5 @@
 - 2024-10-26 project rail try for the desktop shell.
 
 - 2024-10-31 chat ui rough for the desktop shell.
+
+- 2024-11-03 source registry pass for the desktop shell.
