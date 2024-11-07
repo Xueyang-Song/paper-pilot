@@ -14,3 +14,5 @@
 - 2024-10-31 chat ui rough for the desktop shell.
 
 - 2024-11-03 source registry pass for the desktop shell.
+
+- 2024-11-06 paper dedupe fix for the desktop shell.
