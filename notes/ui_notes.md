@@ -16,3 +16,5 @@
 - 2024-11-03 source registry pass for the desktop shell.
 
 - 2024-11-06 paper dedupe fix for the desktop shell.
+
+- 2024-11-10 crawl job notes for the desktop shell.
