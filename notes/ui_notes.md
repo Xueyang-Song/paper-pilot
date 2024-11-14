@@ -22,3 +22,5 @@
 - 2024-11-11 sqlite start for the desktop shell.
 
 - 2024-11-12 project rail try for the desktop shell.
+
+- 2024-11-13 chat ui rough for the desktop shell.
