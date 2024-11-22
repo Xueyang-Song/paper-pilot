@@ -26,3 +26,5 @@
 - 2024-11-13 chat ui rough for the desktop shell.
 
 - 2024-11-20 artifact idea for the desktop shell.
+
+- 2024-11-21 source registry pass for the desktop shell.
