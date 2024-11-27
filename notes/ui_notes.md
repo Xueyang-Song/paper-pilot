@@ -28,3 +28,5 @@
 - 2024-11-20 artifact idea for the desktop shell.
 
 - 2024-11-21 source registry pass for the desktop shell.
+
+- 2024-11-26 paper dedupe fix for the desktop shell.
