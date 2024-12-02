@@ -32,3 +32,5 @@
 - 2024-11-26 paper dedupe fix for the desktop shell.
 
 - 2024-11-30 crawl job notes for the desktop shell.
+
+- 2024-12-01 project rail try for the desktop shell.
