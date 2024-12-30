@@ -46,3 +46,5 @@
 - 2024-12-26 crawl job notes for the desktop shell.
 
 - 2024-12-28 sqlite start for the desktop shell.
+
+- 2024-12-29 project rail try for the desktop shell.
