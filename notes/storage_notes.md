@@ -10,3 +10,5 @@
 - 2025-01-18 policy gate pass around SQLite, FTS, or policy.
 
 - 2025-01-19 tests for schemas around SQLite, FTS, or policy.
+
+- 2025-01-20 paper rows cleanup around SQLite, FTS, or policy.
