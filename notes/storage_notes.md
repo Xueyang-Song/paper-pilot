@@ -10,3 +10,5 @@
 - 2025-02-06 fts search now around SQLite, FTS, or policy.
 
 - 2025-02-08 source connector fix around SQLite, FTS, or policy.
+
+- 2025-02-13 policy gate pass around SQLite, FTS, or policy.
