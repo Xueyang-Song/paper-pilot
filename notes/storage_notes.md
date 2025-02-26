@@ -20,3 +20,5 @@
 - 2025-02-19 crawl service work around SQLite, FTS, or policy.
 
 - 2025-02-24 job queue bits around SQLite, FTS, or policy.
+
+- 2025-02-25 fts search now around SQLite, FTS, or policy.
