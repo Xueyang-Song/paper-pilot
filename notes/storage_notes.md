@@ -54,3 +54,5 @@
 - 2025-03-27 policy gate pass around SQLite, FTS, or policy.
 
 - 2025-03-29 tests for schemas around SQLite, FTS, or policy.
+
+- 2025-04-01 crawl service work around SQLite, FTS, or policy.
