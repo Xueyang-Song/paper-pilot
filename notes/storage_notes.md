@@ -60,3 +60,5 @@
 - 2025-04-02 job queue bits around SQLite, FTS, or policy.
 
 - 2025-04-03 fts search now around SQLite, FTS, or policy.
+
+- 2025-04-05 source connector fix around SQLite, FTS, or policy.
