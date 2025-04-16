@@ -70,3 +70,5 @@
 - 2025-04-09 paper rows cleanup around SQLite, FTS, or policy.
 
 - 2025-04-10 crawl service work around SQLite, FTS, or policy.
+
+- 2025-04-15 job queue bits around SQLite, FTS, or policy.
