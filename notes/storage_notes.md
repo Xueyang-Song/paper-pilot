@@ -10,3 +10,5 @@
 - 2025-04-28 paper rows cleanup around SQLite, FTS, or policy.
 
 - 2025-04-29 crawl service work around SQLite, FTS, or policy.
+
+- 2025-05-01 fts search now around SQLite, FTS, or policy.
