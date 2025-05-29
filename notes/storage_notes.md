@@ -34,3 +34,5 @@
 - 2025-05-24 tests for schemas around SQLite, FTS, or policy.
 
 - 2025-05-27 paper rows cleanup around SQLite, FTS, or policy.
+
+- 2025-05-28 crawl service work around SQLite, FTS, or policy.
