@@ -42,3 +42,5 @@
 - 2025-06-04 source connector fix around SQLite, FTS, or policy.
 
 - 2025-06-05 policy gate pass around SQLite, FTS, or policy.
+
+- 2025-06-07 tests for schemas around SQLite, FTS, or policy.
