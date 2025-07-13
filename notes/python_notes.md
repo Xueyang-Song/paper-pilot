@@ -8,3 +8,5 @@
 - 2025-07-09 settings panel for local tools and artifacts.
 
 - 2025-07-10 credential storage for local tools and artifacts.
+
+- 2025-07-12 approval drawer for local tools and artifacts.
