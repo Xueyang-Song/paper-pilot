@@ -12,3 +12,5 @@
 - 2025-07-23 credential storage for local tools and artifacts.
 
 - 2025-07-26 approval drawer for local tools and artifacts.
+
+- 2025-07-27 markitdown try for local tools and artifacts.
