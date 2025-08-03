@@ -16,3 +16,5 @@
 - 2025-07-27 markitdown try for local tools and artifacts.
 
 - 2025-07-30 python venv work for local tools and artifacts.
+
+- 2025-08-02 scholar fallback test for local tools and artifacts.
