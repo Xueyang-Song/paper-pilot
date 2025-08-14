@@ -28,3 +28,5 @@
 - 2025-08-10 markitdown try for local tools and artifacts.
 
 - 2025-08-11 python venv work for local tools and artifacts.
+
+- 2025-08-13 pdf artifact pass for local tools and artifacts.
