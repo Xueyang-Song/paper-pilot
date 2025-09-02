@@ -44,3 +44,5 @@
 - 2025-08-27 python venv work for local tools and artifacts.
 
 - 2025-08-31 pdf artifact pass for local tools and artifacts.
+
+- 2025-09-01 settings panel for local tools and artifacts.
