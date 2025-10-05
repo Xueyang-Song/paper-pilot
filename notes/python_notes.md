@@ -76,3 +76,5 @@
 - 2025-09-29 settings panel for local tools and artifacts.
 
 - 2025-09-30 credential storage for local tools and artifacts.
+
+- 2025-10-04 markitdown try for local tools and artifacts.
