@@ -8,3 +8,5 @@
 - 2025-10-14 approval drawer for local tools and artifacts.
 
 - 2025-10-16 markitdown try for local tools and artifacts.
+
+- 2025-10-20 python venv work for local tools and artifacts.
