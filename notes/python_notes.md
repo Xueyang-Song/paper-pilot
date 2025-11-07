@@ -20,3 +20,5 @@
 - 2025-10-28 credential storage for local tools and artifacts.
 
 - 2025-11-02 markitdown try for local tools and artifacts.
+
+- 2025-11-06 python venv work for local tools and artifacts.
