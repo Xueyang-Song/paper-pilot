@@ -48,3 +48,5 @@
 - 2025-11-27 approval drawer for local tools and artifacts.
 
 - 2025-11-29 markitdown try for local tools and artifacts.
+
+- 2025-12-01 pdf artifact pass for local tools and artifacts.
