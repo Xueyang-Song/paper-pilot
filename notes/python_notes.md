@@ -52,3 +52,5 @@
 - 2025-12-01 pdf artifact pass for local tools and artifacts.
 
 - 2025-12-03 scholar fallback test for local tools and artifacts.
+
+- 2025-12-04 settings panel for local tools and artifacts.
