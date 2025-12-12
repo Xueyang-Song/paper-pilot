@@ -54,3 +54,5 @@
 - 2025-12-03 scholar fallback test for local tools and artifacts.
 
 - 2025-12-04 settings panel for local tools and artifacts.
+
+- 2025-12-11 credential storage for local tools and artifacts.
