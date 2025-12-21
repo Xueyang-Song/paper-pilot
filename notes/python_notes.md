@@ -64,3 +64,5 @@
 - 2025-12-17 python venv work for local tools and artifacts.
 
 - 2025-12-18 pdf artifact pass for local tools and artifacts.
+
+- 2025-12-20 scholar fallback test for local tools and artifacts.
