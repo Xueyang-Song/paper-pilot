@@ -16,3 +16,5 @@
 - 2026-01-17 agent loop pass while closing the v0.1 app.
 
 - 2026-01-18 brief generation while closing the v0.1 app.
+
+- 2026-01-21 vector search work while closing the v0.1 app.
