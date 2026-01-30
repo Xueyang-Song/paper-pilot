@@ -22,3 +22,5 @@
 - 2026-01-22 ai gateway settings while closing the v0.1 app.
 
 - 2026-01-24 tool logs cleanup while closing the v0.1 app.
+
+- 2026-01-29 ollama tool try while closing the v0.1 app.
