@@ -26,3 +26,5 @@
 - 2026-01-29 ollama tool try while closing the v0.1 app.
 
 - 2026-01-31 agent loop pass while closing the v0.1 app.
+
+- 2026-02-01 vector search work while closing the v0.1 app.
