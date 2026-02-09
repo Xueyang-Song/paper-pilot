@@ -34,3 +34,5 @@
 - 2026-02-04 tool logs cleanup while closing the v0.1 app.
 
 - 2026-02-05 ollama tool try while closing the v0.1 app.
+
+- 2026-02-08 agent loop pass while closing the v0.1 app.
