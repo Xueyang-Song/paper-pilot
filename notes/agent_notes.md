@@ -42,3 +42,5 @@
 - 2026-02-11 vector search work while closing the v0.1 app.
 
 - 2026-02-14 ai gateway settings while closing the v0.1 app.
+
+- 2026-02-15 tool logs cleanup while closing the v0.1 app.
