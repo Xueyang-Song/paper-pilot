@@ -48,3 +48,5 @@
 - 2026-02-16 ollama tool try while closing the v0.1 app.
 
 - 2026-02-17 agent loop pass while closing the v0.1 app.
+
+- 2026-02-26 brief generation while closing the v0.1 app.
