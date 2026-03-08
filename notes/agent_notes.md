@@ -52,3 +52,5 @@
 - 2026-02-26 brief generation while closing the v0.1 app.
 
 - 2026-02-28 vector search work while closing the v0.1 app.
+
+- 2026-03-07 v1 polish while closing the v0.1 app.
