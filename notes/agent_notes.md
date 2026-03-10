@@ -54,3 +54,5 @@
 - 2026-02-28 vector search work while closing the v0.1 app.
 
 - 2026-03-07 v1 polish while closing the v0.1 app.
+
+- 2026-03-09 readme cleanup while closing the v0.1 app.
