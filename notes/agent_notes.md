@@ -8,3 +8,5 @@
 - 2026-03-17 windows package fix while closing the v0.1 app.
 
 - 2026-03-19 v1 polish while closing the v0.1 app.
+
+- 2026-03-21 readme cleanup while closing the v0.1 app.
