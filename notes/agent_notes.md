@@ -12,3 +12,5 @@
 - 2026-03-21 readme cleanup while closing the v0.1 app.
 
 - 2026-03-23 packaging pass while closing the v0.1 app.
+
+- 2026-03-25 tests cleanup while closing the v0.1 app.
