@@ -22,3 +22,5 @@
 - 2026-03-30 v1 polish while closing the v0.1 app.
 
 - 2026-03-31 readme cleanup while closing the v0.1 app.
+
+- 2026-04-05 tests cleanup while closing the v0.1 app.
