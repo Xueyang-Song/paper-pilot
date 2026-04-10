@@ -28,3 +28,5 @@
 - 2026-04-06 final source sync while closing the v0.1 app.
 
 - 2026-04-08 windows package fix while closing the v0.1 app.
+
+- 2026-04-09 v1 polish while closing the v0.1 app.
