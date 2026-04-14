@@ -32,3 +32,5 @@
 - 2026-04-09 v1 polish while closing the v0.1 app.
 
 - 2026-04-12 readme cleanup while closing the v0.1 app.
+
+- 2026-04-13 packaging pass while closing the v0.1 app.
