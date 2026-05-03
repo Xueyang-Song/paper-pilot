@@ -1,2 +1,2 @@
 
-- 2026-04-30 tests cleanup while closing the v0.1 app.
+- 2026-05-02 windows package fix while closing the v0.1 app.
