@@ -1,2 +1,2 @@
 
-- 2026-05-03 tests cleanup while closing the v0.1 app.
+- 2026-05-04 final source sync while closing the v0.1 app.
