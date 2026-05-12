@@ -1,0 +1,61 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (e.g. v0.2.0)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            platform: mac
+            artifact_glob: 'release/*.dmg'
+          - os: windows-latest
+            platform: win
+            artifact_glob: 'release/*.exe'
+          - os: ubuntu-latest
+            platform: linux
+            artifact_glob: 'release/*.AppImage'
+
+    runs-on: ${{ matrix.os }}
+    name: Build (${{ matrix.platform }})
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build & package
+        run: npm run package -- --${{ matrix.platform }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload release artifacts
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name || inputs.tag }}
+          draft: false
+          generate_release_notes: true
+          files: ${{ matrix.artifact_glob }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
