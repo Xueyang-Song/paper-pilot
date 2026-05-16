@@ -23,34 +23,39 @@ afterEach(async () => {
 });
 
 describe("AiService", () => {
-  it("falls back to local structured synthesis when the temporary Ollama model rejects the request", async () => {
-    const project = db.createProject("AI fallback project");
-    db.savePaper(project.id, {
-      id: "paper_ai_fallback",
-      title: "Useful Paper",
-      authors: [],
-      year: 2025,
-      source: "openalex",
-      isOpenAccess: true,
-      fieldsOfStudy: []
+  it("uses the selected Ollama provider for briefs", async () => {
+    const project = seedProject();
+    const fetchMock = vi.fn(async (url: string) => {
+      expect(url).toBe("http://ollama.test/api/chat");
+      return new Response(JSON.stringify({ message: { content: "Ollama brief" } }), { status: 200 });
     });
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(
-        async () =>
-          new Response(
-            JSON.stringify({
-              error: {
-                message: "AI Gateway requires a valid credit card on file to service requests.",
-                type: "customer_verification_required"
-              }
-            }),
-            { status: 403 }
-          )
-      )
-    );
-    const settings = {
-      get: async (): Promise<AppSettings> => ({
+    vi.stubGlobal("fetch", fetchMock);
+    const service = serviceWithSettings({
+      ai: {
+        provider: "ollama",
+        baseUrl: "http://ollama.test",
+        model: "gemma3:12b-it-qat",
+        hasApiKey: false,
+        reasoningEnabled: true
+      },
+      python: { runtimeMode: "managed", markitdownEnabled: true }
+    });
+
+    const brief = await service.generateResearchBrief(project.id, "Summarize the papers.");
+
+    expect(brief.content).toBe("Ollama brief");
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it("uses the selected gateway provider instead of forcing Ollama", async () => {
+    const project = seedProject();
+    const fetchMock = vi.fn(async (url: string) => {
+      expect(url).toBe("https://ai-gateway.vercel.sh/v1/chat/completions");
+      return new Response(JSON.stringify({ choices: [{ message: { content: "Gateway brief" } }] }), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const service = serviceWithSettings(
+      {
         ai: {
           provider: "vercel",
           baseUrl: "https://ai-gateway.vercel.sh/v1",
@@ -59,22 +64,124 @@ describe("AiService", () => {
           reasoningEnabled: true
         },
         python: { runtimeMode: "managed", markitdownEnabled: true }
-      })
-    };
-    const credentials = { get: () => "test-key" };
-    const jobs = new JobQueue();
-    const service = new AiService(db, settings, credentials, new ArtifactService(db, dir), jobs);
+      },
+      "test-key"
+    );
 
     const brief = await service.generateResearchBrief(project.id, "Summarize the papers.");
 
+    expect(brief.content).toBe("Gateway brief");
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it("falls back to local structured synthesis and records provider metadata on model failure", async () => {
+    const project = seedProject();
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("verification required", { status: 403 })));
+    const service = serviceWithSettings(
+      {
+        ai: {
+          provider: "vercel",
+          baseUrl: "https://ai-gateway.vercel.sh/v1",
+          model: "openai/gpt-5.4",
+          hasApiKey: true,
+          reasoningEnabled: true
+        },
+        python: { runtimeMode: "managed", markitdownEnabled: true }
+      },
+      "test-key"
+    );
+
+    const brief = await service.generateResearchBrief(project.id, "Summarize the papers.");
+    const artifact = db.listArtifacts(project.id).find((item) => item.id === brief.artifactId);
+
     expect(brief.content).toContain("used local structured synthesis");
     expect(brief.content).toContain("Useful Paper");
-    expect(fetch).toHaveBeenCalledWith(
-      "http://127.0.0.1:11434/api/chat",
-      expect.objectContaining({
-        method: "POST"
-      })
+    expect(artifact?.metadata).toMatchObject({ provider: "vercel", model: "local-structured" });
+  });
+
+  it("checks Ollama health without generating text", async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      expect(url).toBe("http://ollama.test/api/tags");
+      return new Response(JSON.stringify({ models: [{ name: "gemma3:12b-it-qat" }] }), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const health = await serviceWithSettings({
+      ai: {
+        provider: "ollama",
+        baseUrl: "http://ollama.test",
+        model: "gemma3:12b-it-qat",
+        hasApiKey: false,
+        reasoningEnabled: true
+      },
+      python: { runtimeMode: "managed", markitdownEnabled: true }
+    }).checkProvider();
+
+    expect(health).toMatchObject({ provider: "ollama", reachable: true, status: "ok" });
+    expect(health.models).toEqual(["gemma3:12b-it-qat"]);
+  });
+
+  it("checks gateway health with a non-generating model-list request", async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      expect(url).toBe("https://gateway.test/v1/models");
+      return new Response(JSON.stringify({ data: [{ id: "openai/gpt-5.4" }] }), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const health = await serviceWithSettings(
+      {
+        ai: {
+          provider: "openai-compatible",
+          baseUrl: "https://gateway.test/v1",
+          model: "openai/gpt-5.4",
+          hasApiKey: true,
+          reasoningEnabled: true
+        },
+        python: { runtimeMode: "managed", markitdownEnabled: true }
+      },
+      "test-key"
+    ).checkProvider();
+
+    expect(health).toMatchObject({ provider: "openai-compatible", reachable: true, status: "ok", hasApiKey: true });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://gateway.test/v1/models",
+      expect.objectContaining({ headers: { Authorization: "Bearer test-key" } })
     );
-    expect(jobs.get(brief.jobId)?.status).toBe("completed");
+  });
+
+  it("reports a warning for keyed providers without a stored key", async () => {
+    const health = await serviceWithSettings({
+      ai: {
+        provider: "vercel",
+        baseUrl: "https://ai-gateway.vercel.sh/v1",
+        model: "openai/gpt-5.4",
+        hasApiKey: false,
+        reasoningEnabled: true
+      },
+      python: { runtimeMode: "managed", markitdownEnabled: true }
+    }).checkProvider();
+
+    expect(health).toMatchObject({ provider: "vercel", reachable: false, status: "warning", hasApiKey: false });
   });
 });
+
+function seedProject() {
+  const project = db.createProject("AI provider project");
+  db.savePaper(project.id, {
+    id: "paper_ai_provider",
+    title: "Useful Paper",
+    authors: [],
+    year: 2025,
+    source: "openalex",
+    isOpenAccess: true,
+    fieldsOfStudy: []
+  });
+  return project;
+}
+
+function serviceWithSettings(settingsValue: AppSettings, apiKey?: string): AiService {
+  const settings = { get: async (): Promise<AppSettings> => settingsValue };
+  const credentials = {
+    get: () => apiKey,
+    has: () => Boolean(apiKey)
+  };
+  return new AiService(db, settings, credentials, new ArtifactService(db, dir), new JobQueue());
+}

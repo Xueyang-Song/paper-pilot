@@ -20,7 +20,7 @@ Implemented today:
 - Secure-ish credential storage through Electron `safeStorage` when available.
 - Python project virtualenv creation, guarded script execution, Playwright install hook, and MarkItDown conversion.
 - Open-access PDF fetching into project artifacts.
-- Local Ollama tool-calling agent path, plus Vercel AI Gateway / OpenAI-compatible settings.
+- Selectable AI provider settings for Ollama, Vercel AI Gateway, and OpenAI-compatible endpoints, with non-generating health checks.
 - Windows packaging via `electron-builder`.
 
 Important caveats:
@@ -127,16 +127,16 @@ The crawler stores metadata for discovered papers and fetches open-access full t
 
 ## AI Providers
 
-Paper Pilot is Vercel AI Gateway-first, with a generic OpenAI-compatible base URL fallback in settings.
+Paper Pilot defaults to Ollama for local development and testing. Settings can switch brief generation to Ollama, Vercel AI Gateway, or any OpenAI-compatible `/v1` endpoint. Provider checks use lightweight model-list endpoints (`/api/tags` for Ollama, `/v1/models` for hosted providers) and do not run paid text generation.
 
-The app also includes a local Ollama tool-calling path. For a small local smoke-test model:
+For the recommended local development model:
 
 ```bash
-ollama pull qwen2.5:0.5b
+ollama pull gemma3:12b-it-qat
 ollama serve
 ```
 
-If Ollama is running at `http://127.0.0.1:11434`, the local agent service can use it for tool calls such as listing project state, searching the corpus, preparing crawls, and generating briefs.
+If Ollama is running at `http://127.0.0.1:11434`, the local agent service can use it for tool calls such as listing project state, searching the corpus, preparing crawls, and generating briefs. Hosted providers require the AI Gateway credential slot to have a stored key.
 
 ## Python And MarkItDown
 
@@ -191,7 +191,9 @@ src/
   preload/
     index.ts                  Safe renderer API bridge
   renderer/
-    App.tsx                   Desktop UI
+    App.tsx                   Desktop shell/orchestrator
+    components/               Chat, artifacts, search, settings, jobs, PDF viewer
+    lib/                      Shared renderer hooks and highlighting helpers
     styles.css                Tailwind and app styles
   shared/
     schemas.ts                Zod schemas and shared types
@@ -214,7 +216,7 @@ Current tests cover:
 - SQLite migrations, messages, paper dedupe, FTS, and vector search
 - Source registry behavior and graceful source failures
 - Policy approval rules
-- Local Ollama-style tool loop with mocked HTTP
+- AI provider selection, health checks, fallback synthesis, and local Ollama-style tool loop with mocked HTTP
 - Open-access PDF artifact storage
 
 Opt-in crawler smoke tests are available for the slower/live paths:
@@ -247,7 +249,7 @@ Manual smoke tests that have been run in this workspace:
 
 ## Known Gaps
 
-- Browser crawler resilience needs more live-source testing and fixture coverage.
+- Browser crawler resilience still needs broader live-source testing against upstream blocking behavior.
 - The agent runtime has local tool calling, but not full frontier-model streaming/tool-loop parity.
 - Python execution is permissioned, but not an OS-level sandbox.
 - Citation-backed brief quality depends heavily on available full text and configured model quality.

@@ -1,6 +1,8 @@
 import electron from "electron";
 import type {
   AppSettings,
+  AiProviderCheckRequest,
+  AiProviderHealth,
   Artifact,
   ChatRequest,
   ChatResponse,
@@ -49,6 +51,7 @@ export interface PaperPilotApi {
   listCredentialFlags(): Promise<Array<{ sourceId: string; label: string; updatedAt: string }>>;
   runCrawl(input: { projectId: string; config: Partial<CrawlConfig>; approved?: boolean }): Promise<unknown>;
   generateBrief(input: { projectId: string; prompt: string }): Promise<{ content: string; artifactId: string; jobId: string }>;
+  checkAiProvider(input?: AiProviderCheckRequest): Promise<AiProviderHealth>;
   scorePapers(input: { projectId: string }): Promise<{ scoredCount: number; papers: Paper[] }>;
   search(input: SearchRequest): Promise<SearchResponse>;
   reindexSearch(input?: ReindexRequest): Promise<ReindexResponse>;
@@ -81,6 +84,7 @@ const api: PaperPilotApi = {
   listCredentialFlags: () => ipcRenderer.invoke("credentials:listFlags"),
   runCrawl: (input) => ipcRenderer.invoke("crawl:run", input),
   generateBrief: (input) => ipcRenderer.invoke("brief:generate", input),
+  checkAiProvider: (input) => ipcRenderer.invoke("ai:checkProvider", input),
   scorePapers: (input) => ipcRenderer.invoke("papers:score", input),
   search: (input) => ipcRenderer.invoke("search:run", input),
   reindexSearch: (input) => ipcRenderer.invoke("search:reindex", input),

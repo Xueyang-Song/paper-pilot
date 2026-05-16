@@ -3,6 +3,7 @@ import { stat } from "node:fs/promises";
 import { z } from "zod";
 import {
   appSettingsSchema,
+  aiProviderCheckRequestSchema,
   chatRequestSchema,
   credentialUpsertSchema,
   crawlConfigSchema,
@@ -93,6 +94,8 @@ export function registerIpc(services: IpcServices): void {
     const parsed = z.object({ projectId: z.string(), prompt: z.string().min(1) }).parse(input);
     return services.ai.generateResearchBrief(parsed.projectId, parsed.prompt);
   });
+
+  ipcMain.handle("ai:checkProvider", (_event, input: unknown) => services.ai.checkProvider(aiProviderCheckRequestSchema.parse(input)));
 
   ipcMain.handle("papers:score", (_event, input: unknown) => {
     const parsed = z.object({ projectId: z.string() }).parse(input);

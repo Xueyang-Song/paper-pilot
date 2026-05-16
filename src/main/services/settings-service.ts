@@ -3,7 +3,7 @@ import { dirname } from "node:path";
 import { type AppSettings, appSettingsSchema } from "../../shared/schemas.js";
 import { ensureDir } from "../utils.js";
 import type { CredentialService } from "./credential-service.js";
-import { DEFAULT_OLLAMA_BASE_URL, DEFAULT_OLLAMA_MODEL, FORCE_OLLAMA_FOR_TESTING } from "./ollama-config.js";
+import { DEFAULT_OLLAMA_BASE_URL, DEFAULT_OLLAMA_MODEL } from "./ollama-config.js";
 
 const defaults: AppSettings = appSettingsSchema.parse({
   ai: {
@@ -30,11 +30,6 @@ export class SettingsService {
       const raw = JSON.parse(await readFile(this.settingsPath, "utf8")) as unknown;
       const parsed = appSettingsSchema.parse({ ...defaults, ...(raw as object) });
       parsed.ai.hasApiKey = this.credentials.has("ai-gateway");
-      if (FORCE_OLLAMA_FOR_TESTING) {
-        parsed.ai.provider = "ollama";
-        parsed.ai.baseUrl = DEFAULT_OLLAMA_BASE_URL;
-        parsed.ai.model = DEFAULT_OLLAMA_MODEL;
-      }
       return parsed;
     } catch {
       return { ...defaults, ai: { ...defaults.ai, hasApiKey: this.credentials.has("ai-gateway") } };
