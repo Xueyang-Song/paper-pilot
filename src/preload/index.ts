@@ -11,6 +11,10 @@ import type {
   Paper,
   Project,
   ProjectPolicy,
+  ReindexRequest,
+  ReindexResponse,
+  SearchRequest,
+  SearchResponse,
   SourceDefinition
 } from "../shared/schemas.js";
 
@@ -22,6 +26,14 @@ export interface ProjectBundle {
   artifacts: Artifact[];
   papers: Paper[];
   jobs: Job[];
+}
+
+export interface ArtifactContent {
+  artifact: Artifact;
+  encoding: "utf8" | "base64";
+  content: string;
+  size: number;
+  truncated: boolean;
 }
 
 export interface PaperPilotApi {
@@ -37,6 +49,11 @@ export interface PaperPilotApi {
   listCredentialFlags(): Promise<Array<{ sourceId: string; label: string; updatedAt: string }>>;
   runCrawl(input: { projectId: string; config: Partial<CrawlConfig>; approved?: boolean }): Promise<unknown>;
   generateBrief(input: { projectId: string; prompt: string }): Promise<{ content: string; artifactId: string; jobId: string }>;
+  scorePapers(input: { projectId: string }): Promise<{ scoredCount: number; papers: Paper[] }>;
+  search(input: SearchRequest): Promise<SearchResponse>;
+  reindexSearch(input?: ReindexRequest): Promise<ReindexResponse>;
+  readArtifact(input: { projectId: string; artifactId: string }): Promise<ArtifactContent>;
+  revealArtifact(input: { projectId: string; artifactId: string }): Promise<{ ok: boolean }>;
   runPythonScript(input: { projectId: string; name: string; code: string; args?: string[]; approved?: boolean }): Promise<unknown>;
   installBrowser(input: { projectId: string; approved?: boolean }): Promise<unknown>;
   convertMarkItDown(input: {
@@ -64,6 +81,11 @@ const api: PaperPilotApi = {
   listCredentialFlags: () => ipcRenderer.invoke("credentials:listFlags"),
   runCrawl: (input) => ipcRenderer.invoke("crawl:run", input),
   generateBrief: (input) => ipcRenderer.invoke("brief:generate", input),
+  scorePapers: (input) => ipcRenderer.invoke("papers:score", input),
+  search: (input) => ipcRenderer.invoke("search:run", input),
+  reindexSearch: (input) => ipcRenderer.invoke("search:reindex", input),
+  readArtifact: (input) => ipcRenderer.invoke("artifacts:read", input),
+  revealArtifact: (input) => ipcRenderer.invoke("artifacts:reveal", input),
   runPythonScript: (input) => ipcRenderer.invoke("python:runScript", input),
   installBrowser: (input) => ipcRenderer.invoke("python:installBrowser", input),
   convertMarkItDown: (input) => ipcRenderer.invoke("python:convertMarkItDown", input),
