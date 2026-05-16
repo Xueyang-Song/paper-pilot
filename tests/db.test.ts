@@ -26,6 +26,16 @@ describe("PaperPilotDb", () => {
     expect(db.listMessages(project.id).map((message) => message.role)).toEqual(["user", "assistant"]);
   });
 
+  it("renames projects", () => {
+    const project = db.createProject("Old name", "protein");
+
+    const renamed = db.renameProject(project.id, "New name");
+
+    expect(renamed.title).toBe("New name");
+    expect(renamed.topic).toBe("protein");
+    expect(db.getProject(project.id)?.title).toBe("New name");
+  });
+
   it("dedupes papers by DOI", () => {
     const project = db.createProject("Materials");
     db.savePaper(project.id, {

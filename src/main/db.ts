@@ -305,6 +305,15 @@ export class PaperPilotDb {
     }
   }
 
+  renameProject(projectId: string, title: string): Project {
+    const nextTitle = title.trim();
+    if (!nextTitle) throw new Error("Project title cannot be empty.");
+    this.touchProject(projectId, nextTitle);
+    const project = this.getProject(projectId);
+    if (!project) throw new Error(`Project not found: ${projectId}`);
+    return project;
+  }
+
   updateProjectPolicy(projectId: string, patch: Partial<ProjectPolicy>): ProjectPolicy {
     const project = this.getProject(projectId);
     if (!project) throw new Error(`Project not found: ${projectId}`);
