@@ -98,7 +98,7 @@ export class CrawlService {
           sourceId === "google-scholar" && this.browserCrawler
             ? {
                 ...(await this.browserCrawler.runGoogleScholar(projectId, config)),
-                provenance: { mode: "playwright" }
+                provenance: { mode: "playwright", searchUrl: googleScholarDiagnosticUrl(config.topic) }
               }
             : await this.registry.run(sourceId, config, {
                 credentials: credentialMap,
@@ -260,6 +260,15 @@ function diagnosticUrl(provenance: Record<string, unknown> | undefined): string 
     if (typeof value === "string" && value.trim()) return value;
   }
   return undefined;
+}
+
+function googleScholarDiagnosticUrl(topic: string): string {
+  const baseUrl = process.env.PAPER_PILOT_SCHOLAR_URL ?? "https://scholar.google.com/scholar";
+  if (baseUrl.startsWith("file:")) return baseUrl;
+  const url = new URL(baseUrl);
+  url.searchParams.set("q", topic);
+  url.searchParams.set("hl", "en");
+  return url.toString();
 }
 
 function escapeTable(value: string): string {

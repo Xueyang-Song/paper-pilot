@@ -136,7 +136,7 @@ ollama pull gemma3:12b-it-qat
 ollama serve
 ```
 
-If Ollama is running at `http://127.0.0.1:11434`, the local agent service can use it for tool calls such as listing project state, searching the corpus, preparing crawls, and generating briefs. Hosted providers require the AI Gateway credential slot to have a stored key.
+If Ollama is selected and running at `http://127.0.0.1:11434`, the local agent service can use it for tool calls such as listing project state, searching the corpus, preparing crawls, and generating briefs. Hosted providers require the AI Gateway credential slot to have a stored key. When a hosted provider is selected, Paper Pilot does not silently route general chat through Ollama.
 
 ## Python And MarkItDown
 

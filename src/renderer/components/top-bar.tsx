@@ -11,9 +11,18 @@ export function TopBar(props: {
   onOpenSearch(): void;
   onOpenSettings(): void;
 }): JSX.Element {
-  const aiLabel = props.aiHealth
-    ? `${providerLabel(props.aiHealth.provider)} ${props.aiHealth.reachable ? "ready" : props.aiHealth.status}`
-    : "AI provider";
+  const aiLabel = props.aiHealth ? aiStatusLabel(props.aiHealth) : "AI provider";
+  const aiTitle = props.aiHealth
+    ? [
+        `Provider: ${providerLabel(props.aiHealth.provider)}`,
+        `Model: ${props.aiHealth.model}`,
+        `Key: ${props.aiHealth.hasApiKey ? "stored" : "not stored"}`,
+        `Reachability: ${props.aiHealth.reachable ? "reachable" : "not reachable"}`,
+        props.aiHealth.detail ? `Last status: ${props.aiHealth.detail}` : undefined
+      ]
+        .filter(Boolean)
+        .join("\n")
+    : "AI provider status has not been checked yet.";
   return (
     <header className="flex h-16 items-center justify-between border-b border-stone-200 bg-[#fbfaf6]/95 px-5">
       <div className="min-w-0">
@@ -26,7 +35,7 @@ export function TopBar(props: {
       </div>
       <div className="flex items-center gap-2">
         <StatusPill icon={<Database size={14} />} label="SQLite" />
-        <StatusPill icon={<Brain size={14} />} label={aiLabel} />
+        <StatusPill icon={<Brain size={14} />} label={aiLabel} title={aiTitle} />
         <IconButton label="Search" onClick={props.onOpenSearch}>
           <Search size={18} />
         </IconButton>
@@ -36,6 +45,12 @@ export function TopBar(props: {
       </div>
     </header>
   );
+}
+
+function aiStatusLabel(health: AiProviderHealth): string {
+  const status = health.status === "ok" ? "ready" : health.status;
+  const keyLabel = health.provider === "ollama" ? "local" : health.hasApiKey ? "key" : "no key";
+  return `${providerLabel(health.provider)} ${status} · ${health.model} · ${keyLabel}`;
 }
 
 function providerLabel(provider: AiProviderHealth["provider"]): string {

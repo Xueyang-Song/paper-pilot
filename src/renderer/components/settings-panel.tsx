@@ -87,7 +87,9 @@ export function SettingsPanel({
 
   const flags = flagsQuery.data ?? [];
   const credentialed = useMemo(() => new Set(flags.map((flag) => flag.sourceId)), [flags]);
-  const displayedHealth = checkProvider.data ?? aiHealth;
+  const candidateHealth = checkProvider.data ?? aiHealth;
+  const displayedHealth =
+    candidateHealth?.provider === provider && candidateHealth.baseUrl === baseUrl && candidateHealth.model === model ? candidateHealth : undefined;
 
   function changeProvider(nextProvider: AppSettings["ai"]["provider"]): void {
     setProvider(nextProvider);
@@ -284,4 +286,3 @@ export function SettingsPanel({
     </div>
   );
 }
-

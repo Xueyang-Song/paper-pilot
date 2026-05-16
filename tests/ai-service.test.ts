@@ -96,7 +96,12 @@ describe("AiService", () => {
 
     expect(brief.content).toContain("used local structured synthesis");
     expect(brief.content).toContain("Useful Paper");
-    expect(artifact?.metadata).toMatchObject({ provider: "vercel", model: "local-structured" });
+    expect(artifact?.metadata).toMatchObject({
+      provider: "vercel",
+      model: "local-structured",
+      attemptedModel: "openai/gpt-5.4",
+      providerError: expect.stringContaining("AI Gateway request failed 403")
+    });
   });
 
   it("checks Ollama health without generating text", async () => {
@@ -118,6 +123,24 @@ describe("AiService", () => {
 
     expect(health).toMatchObject({ provider: "ollama", reachable: true, status: "ok" });
     expect(health.models).toEqual(["gemma3:12b-it-qat"]);
+  });
+
+  it("warns when Ollama is reachable but has no installed models", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ models: [] }), { status: 200 })));
+
+    const health = await serviceWithSettings({
+      ai: {
+        provider: "ollama",
+        baseUrl: "http://ollama.test",
+        model: "gemma3:12b-it-qat",
+        hasApiKey: false,
+        reasoningEnabled: true
+      },
+      python: { runtimeMode: "managed", markitdownEnabled: true }
+    }).checkProvider();
+
+    expect(health).toMatchObject({ provider: "ollama", reachable: true, status: "warning" });
+    expect(health.detail).toContain("no models");
   });
 
   it("checks gateway health with a non-generating model-list request", async () => {
@@ -145,6 +168,28 @@ describe("AiService", () => {
       "https://gateway.test/v1/models",
       expect.objectContaining({ headers: { Authorization: "Bearer test-key" } })
     );
+  });
+
+  it("preserves nested OpenAI-compatible base paths", async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      expect(url).toBe("https://gateway.test/proxy/v1/models");
+      return new Response(JSON.stringify({ data: [{ id: "model-a" }] }), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await serviceWithSettings(
+      {
+        ai: {
+          provider: "openai-compatible",
+          baseUrl: "https://gateway.test/proxy/v1",
+          model: "model-a",
+          hasApiKey: true,
+          reasoningEnabled: true
+        },
+        python: { runtimeMode: "managed", markitdownEnabled: true }
+      },
+      "test-key"
+    ).checkProvider();
   });
 
   it("reports a warning for keyed providers without a stored key", async () => {
