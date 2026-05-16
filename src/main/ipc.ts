@@ -1,23 +1,30 @@
 import electron from "electron";
+import { stat } from "node:fs/promises";
 import { z } from "zod";
 import {
   appSettingsSchema,
   chatRequestSchema,
   credentialUpsertSchema,
   crawlConfigSchema,
+  reindexRequestSchema,
+  searchRequestSchema,
   type ProjectPolicy
 } from "../shared/schemas.js";
 import type { PaperPilotDb } from "./db.js";
 import type { SourceRegistry } from "./sources/registry.js";
 import type { AgentService } from "./services/agent-service.js";
 import type { AiService } from "./services/ai-service.js";
+import type { ArtifactService } from "./services/artifact-service.js";
 import type { CredentialService } from "./services/credential-service.js";
 import type { CrawlService } from "./services/crawl-service.js";
 import type { JobQueue } from "./services/job-queue.js";
+import type { PaperScoringService } from "./services/paper-scoring-service.js";
 import type { PythonService } from "./services/python-service.js";
+import type { SearchService } from "./services/search-service.js";
 import type { SettingsService } from "./services/settings-service.js";
 
-const { BrowserWindow, ipcMain } = electron;
+const { BrowserWindow, ipcMain, shell } = electron;
+const MAX_TEXT_VIEW_BYTES = 2 * 1024 * 1024;
 
 export interface IpcServices {
   db: PaperPilotDb;
@@ -25,10 +32,13 @@ export interface IpcServices {
   agent: AgentService;
   crawl: CrawlService;
   ai: AiService;
+  artifacts: ArtifactService;
   credentials: CredentialService;
   settings: SettingsService;
   python: PythonService;
   jobs: JobQueue;
+  scoring: PaperScoringService;
+  search: SearchService;
 }
 
 export function registerIpc(services: IpcServices): void {
@@ -82,6 +92,40 @@ export function registerIpc(services: IpcServices): void {
   ipcMain.handle("brief:generate", (_event, input: unknown) => {
     const parsed = z.object({ projectId: z.string(), prompt: z.string().min(1) }).parse(input);
     return services.ai.generateResearchBrief(parsed.projectId, parsed.prompt);
+  });
+
+  ipcMain.handle("papers:score", (_event, input: unknown) => {
+    const parsed = z.object({ projectId: z.string() }).parse(input);
+    return services.scoring.scoreProjectPapers(parsed.projectId);
+  });
+
+  ipcMain.handle("search:run", (_event, input: unknown) => services.search.search(searchRequestSchema.parse(input)));
+
+  ipcMain.handle("search:reindex", (_event, input: unknown) => services.search.reindex(reindexRequestSchema.parse(input ?? {})));
+
+  ipcMain.handle("artifacts:read", async (_event, input: unknown) => {
+    const parsed = z.object({ projectId: z.string(), artifactId: z.string() }).parse(input);
+    const artifact = services.db.listArtifacts(parsed.projectId).find((item) => item.id === parsed.artifactId);
+    if (!artifact) throw new Error(`Artifact not found: ${parsed.artifactId}`);
+    const buffer = await services.artifacts.readArtifact(artifact);
+    const fileStat = await stat(artifact.path).catch(() => undefined);
+    const isText = isTextArtifact(artifact.mime, artifact.type);
+    const contentBuffer = isText ? buffer.subarray(0, MAX_TEXT_VIEW_BYTES) : buffer;
+    return {
+      artifact,
+      encoding: isText ? "utf8" : "base64",
+      content: isText ? contentBuffer.toString("utf8") : contentBuffer.toString("base64"),
+      size: fileStat?.size ?? buffer.byteLength,
+      truncated: isText && buffer.byteLength > MAX_TEXT_VIEW_BYTES
+    };
+  });
+
+  ipcMain.handle("artifacts:reveal", (_event, input: unknown) => {
+    const parsed = z.object({ projectId: z.string(), artifactId: z.string() }).parse(input);
+    const artifact = services.db.listArtifacts(parsed.projectId).find((item) => item.id === parsed.artifactId);
+    if (!artifact) throw new Error(`Artifact not found: ${parsed.artifactId}`);
+    shell.showItemInFolder(artifact.path);
+    return { ok: true };
   });
 
   ipcMain.handle("python:runScript", (_event, input: unknown) => {
@@ -151,4 +195,12 @@ export function registerIpc(services: IpcServices): void {
       window.webContents.send("jobs:changed", job);
     }
   });
+}
+
+function isTextArtifact(mime: string, type: string): boolean {
+  return (
+    mime.startsWith("text/") ||
+    mime === "application/json" ||
+    ["metadata-json", "markdown", "crawl-log", "brief", "script", "table"].includes(type)
+  );
 }
