@@ -42,6 +42,7 @@ export interface PaperPilotApi {
   listProjects(): Promise<Project[]>;
   getProjectBundle(projectId: string): Promise<ProjectBundle>;
   createProject(input: { title: string; topic?: string }): Promise<Project>;
+  renameProject(input: { projectId: string; title: string }): Promise<Project>;
   updateProjectPolicy(input: { projectId: string; patch: Partial<ProjectPolicy> }): Promise<ProjectPolicy>;
   sendChat(input: ChatRequest): Promise<ChatResponse>;
   listSources(): Promise<SourceDefinition[]>;
@@ -75,6 +76,7 @@ const api: PaperPilotApi = {
   listProjects: () => ipcRenderer.invoke("projects:list"),
   getProjectBundle: (projectId) => ipcRenderer.invoke("projects:getBundle", projectId),
   createProject: (input) => ipcRenderer.invoke("projects:create", input),
+  renameProject: (input) => ipcRenderer.invoke("projects:rename", input),
   updateProjectPolicy: (input) => ipcRenderer.invoke("projects:updatePolicy", input),
   sendChat: (input) => ipcRenderer.invoke("chat:send", input),
   listSources: () => ipcRenderer.invoke("sources:list"),

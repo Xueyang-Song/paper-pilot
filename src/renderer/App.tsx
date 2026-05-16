@@ -84,6 +84,17 @@ function App(): JSX.Element {
     }
   });
 
+  const renameProject = useMutation({
+    mutationFn: (input: { projectId: string; title: string }) => window.paperPilot.renameProject(input),
+    onSuccess: (project) => {
+      queryClient.setQueryData(["bundle", project.id], (bundle: typeof bundleQuery.data) =>
+        bundle?.project.id === project.id ? { ...bundle, project } : bundle
+      );
+      void queryClient.invalidateQueries({ queryKey: ["projects"] });
+      void queryClient.invalidateQueries({ queryKey: ["bundle", project.id] });
+    }
+  });
+
   const activeBundle = bundleQuery.data?.project.id === activeProjectId ? bundleQuery.data : undefined;
   const artifacts = activeBundle?.artifacts ?? [];
 
@@ -95,6 +106,7 @@ function App(): JSX.Element {
           activeProjectId={activeProjectId}
           onSelect={setActiveProjectId}
           onCreate={() => createProject.mutate()}
+          onRename={(projectId, title) => renameProject.mutateAsync({ projectId, title })}
         />
         <section className="relative flex min-h-0 min-w-0 flex-col border-l border-stone-300/80 bg-[#fbfaf6]">
           <TopBar

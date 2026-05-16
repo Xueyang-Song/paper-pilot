@@ -63,6 +63,11 @@ export function registerIpc(services: IpcServices): void {
     return services.db.createProject(parsed.title, parsed.topic);
   });
 
+  ipcMain.handle("projects:rename", (_event, input: unknown) => {
+    const parsed = z.object({ projectId: z.string(), title: z.string().trim().min(1).max(120) }).parse(input);
+    return services.db.renameProject(parsed.projectId, parsed.title);
+  });
+
   ipcMain.handle("projects:updatePolicy", (_event, input: unknown) => {
     const parsed = z.object({ projectId: z.string(), patch: z.record(z.string(), z.unknown()) }).parse(input);
     return services.db.updateProjectPolicy(parsed.projectId, parsed.patch as Partial<ProjectPolicy>);
