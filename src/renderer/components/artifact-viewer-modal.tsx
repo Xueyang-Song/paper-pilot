@@ -29,7 +29,6 @@ export function ArtifactViewerModal({
   onSelect(artifactId: string): void;
   highlightQuery: string;
   initialSearchPage?: number;
-  initialSearchResultId?: string;
   onClearHighlight(): void;
   onOpenSearch(): void;
   onClose(): void;

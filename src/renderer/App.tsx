@@ -31,7 +31,6 @@ function App(): JSX.Element {
   const [viewerArtifactId, setViewerArtifactId] = useState<string | undefined>(undefined);
   const [viewerHighlightQuery, setViewerHighlightQuery] = useState("");
   const [viewerSearchPage, setViewerSearchPage] = useState<number | undefined>(undefined);
-  const [viewerSearchResultId, setViewerSearchResultId] = useState<string | undefined>(undefined);
   const queryClient = useQueryClient();
 
   const projectsQuery = useQuery({
@@ -115,7 +114,6 @@ function App(): JSX.Element {
               onOpenArtifact={(artifactId) => {
                 setViewerHighlightQuery("");
                 setViewerSearchPage(undefined);
-                setViewerSearchResultId(undefined);
                 setViewerArtifactId(artifactId);
               }}
             />
@@ -132,18 +130,15 @@ function App(): JSX.Element {
           onSelect={setViewerArtifactId}
           highlightQuery={viewerHighlightQuery}
           initialSearchPage={viewerSearchPage}
-          initialSearchResultId={viewerSearchResultId}
           onClearHighlight={() => {
             setViewerHighlightQuery("");
             setViewerSearchPage(undefined);
-            setViewerSearchResultId(undefined);
           }}
           onOpenSearch={() => setSearchOpen(true)}
           onClose={() => {
             setViewerArtifactId(undefined);
             setViewerHighlightQuery("");
             setViewerSearchPage(undefined);
-            setViewerSearchResultId(undefined);
           }}
         />
       ) : null}
@@ -156,7 +151,6 @@ function App(): JSX.Element {
             setViewerArtifactId(artifactId);
             setViewerHighlightQuery(query);
             setViewerSearchPage(result.page);
-            setViewerSearchResultId(result.id);
             setSearchOpen(false);
           }}
           onClose={() => setSearchOpen(false)}

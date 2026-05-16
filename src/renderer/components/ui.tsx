@@ -47,11 +47,14 @@ export function Metric({ label, value }: { label: string; value: number }): JSX.
   );
 }
 
-export function StatusPill({ icon, label }: { icon: JSX.Element; label: string }): JSX.Element {
+export function StatusPill({ icon, label, title }: { icon: JSX.Element; label: string; title?: string }): JSX.Element {
   return (
-    <div className="hidden h-8 items-center gap-2 rounded-md border border-stone-300 bg-white px-3 text-xs text-stone-700 lg:inline-flex">
+    <div
+      title={title}
+      className="hidden h-8 max-w-[360px] items-center gap-2 rounded-md border border-stone-300 bg-white px-3 text-xs text-stone-700 lg:inline-flex"
+    >
       {icon}
-      {label}
+      <span className="truncate">{label}</span>
     </div>
   );
 }

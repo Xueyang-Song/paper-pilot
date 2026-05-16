@@ -11,7 +11,6 @@ import type { AiService } from "./ai-service.js";
 import type { CrawlService } from "./crawl-service.js";
 import type { JobQueue } from "./job-queue.js";
 import type { LocalAgentService } from "./local-agent-service.js";
-import { DEFAULT_OLLAMA_MODEL } from "./ollama-config.js";
 
 export class AgentService {
   constructor(
@@ -74,7 +73,7 @@ export class AgentService {
             projectId: project.id,
             role: "assistant",
             content: agentRun.content,
-            metadata: { agent: "ollama", model: DEFAULT_OLLAMA_MODEL }
+            metadata: { agent: agentRun.provider, model: agentRun.model }
           });
         } catch (error) {
           this.db.appendMessage({

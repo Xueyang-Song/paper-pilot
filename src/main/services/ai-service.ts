@@ -9,7 +9,6 @@ import type { PaperPilotDb } from "../db.js";
 import type { ArtifactService } from "./artifact-service.js";
 import type { CredentialService } from "./credential-service.js";
 import type { JobQueue } from "./job-queue.js";
-import { DEFAULT_OLLAMA_BASE_URL, DEFAULT_OLLAMA_MODEL } from "./ollama-config.js";
 import type { SettingsService } from "./settings-service.js";
 
 export class AiService {
@@ -31,12 +30,15 @@ export class AiService {
     let content: string;
     let model = "local-structured";
     let aiWarning: string | undefined;
+    let providerError: string | undefined;
+    const attemptedModel = settings.ai.model;
     if (settings.ai.provider === "ollama") {
       this.jobs.update(job.id, { progress: 0.35, detail: `Calling local Ollama model ${settings.ai.model}.` });
       try {
         content = await this.callOllama(settings, renderBriefPrompt(project.title, prompt, papers, chunks));
         model = settings.ai.model;
       } catch (error) {
+        providerError = formatProviderError(error);
         aiWarning = formatOllamaFallbackWarning(error);
         this.jobs.update(job.id, { progress: 0.55, detail: "Local Ollama model failed; using local structured synthesis." });
         content = [aiWarning, "", localBrief(project.title, prompt, papers, chunks)].join("\n");
@@ -47,6 +49,7 @@ export class AiService {
         content = await this.callGateway(settings, renderBriefPrompt(project.title, prompt, papers, chunks));
         model = settings.ai.model;
       } catch (error) {
+        providerError = formatProviderError(error);
         aiWarning = formatAiGatewayFallbackWarning(error);
         this.jobs.update(job.id, { progress: 0.55, detail: "Configured AI model failed; using local structured synthesis." });
         content = [aiWarning, "", localBrief(project.title, prompt, papers, chunks)].join("\n");
@@ -61,7 +64,7 @@ export class AiService {
       title: `Research brief - ${project.title}`,
       content,
       source: "ai-service",
-      metadata: { prompt, paperCount: papers.length, provider: settings.ai.provider, model, aiWarning },
+      metadata: { prompt, paperCount: papers.length, provider: settings.ai.provider, model, attemptedModel, providerError, aiWarning },
       indexText: true
     });
     this.jobs.update(job.id, {
@@ -76,8 +79,7 @@ export class AiService {
   async callGateway(settings: AppSettings, prompt: string): Promise<string> {
     const apiKey = this.credentials.get("ai-gateway");
     if (!apiKey) throw new Error("AI Gateway API key is not configured.");
-    const url = new URL("/v1/chat/completions", settings.ai.baseUrl.endsWith("/v1") ? settings.ai.baseUrl.slice(0, -3) : settings.ai.baseUrl);
-    const response = await fetch(url.toString(), {
+    const response = await fetch(openAiCompatibleUrl(settings.ai.baseUrl, "chat/completions"), {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -146,15 +148,21 @@ export class AiService {
         if (!response.ok) throw new Error(`Ollama returned ${response.status}.`);
         const data = (await response.json()) as { models?: Array<{ name?: string }> };
         const models = (data.models ?? []).map((model) => model.name).filter((name): name is string => Boolean(name));
+        const status = models.length && models.includes(ai.model) ? "ok" : "warning";
+        const detail = !models.length
+          ? "Ollama is reachable, but no models are installed."
+          : models.includes(ai.model)
+            ? "Ollama is reachable."
+            : `Ollama is reachable, but ${ai.model} is not installed.`;
         return aiProviderHealthSchema.parse({
           provider: ai.provider,
           baseUrl: ai.baseUrl,
           model: ai.model,
           hasApiKey,
           reachable: true,
-          status: models.includes(ai.model) || !models.length ? "ok" : "warning",
+          status,
           checkedAt,
-          detail: models.includes(ai.model) || !models.length ? "Ollama is reachable." : `Ollama is reachable, but ${ai.model} is not installed.`,
+          detail,
           models
         });
       }
@@ -172,7 +180,7 @@ export class AiService {
         });
       }
 
-      const response = await fetch(new URL("models", ensureTrailingSlash(ai.baseUrl)).toString(), {
+      const response = await fetch(openAiCompatibleUrl(ai.baseUrl, "models"), {
         headers: { Authorization: `Bearer ${this.credentials.get("ai-gateway")}` },
         signal: AbortSignal.timeout(5000)
       });
@@ -218,8 +226,14 @@ function trimTrailingSlash(value: string): string {
   return value.replace(/\/+$/, "");
 }
 
-function ensureTrailingSlash(value: string): string {
-  return value.endsWith("/") ? value : `${value}/`;
+function openAiCompatibleUrl(baseUrl: string, resource: string): string {
+  const normalizedBase = trimTrailingSlash(baseUrl);
+  const versionedBase = normalizedBase.endsWith("/v1") ? normalizedBase : `${normalizedBase}/v1`;
+  return `${versionedBase}/${resource.replace(/^\/+/, "")}`;
+}
+
+function formatProviderError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function formatAiGatewayFallbackWarning(error: unknown): string {

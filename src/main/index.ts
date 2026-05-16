@@ -72,7 +72,7 @@ app.whenReady().then(() => {
   const search = new SearchService(db, artifacts);
   const crawl = new CrawlService(db, registry, credentials, artifacts, jobs, browserCrawler, fullText, scoring);
   const ai = new AiService(db, settings, credentials, artifacts, jobs);
-  const localAgent = new LocalAgentService(db, registry, crawl, ai, jobs);
+  const localAgent = new LocalAgentService(db, registry, crawl, ai, jobs, { settings });
   const agent = new AgentService(db, crawl, ai, artifacts, jobs, localAgent);
 
   registerIpc({ db, registry, agent, crawl, ai, artifacts, credentials, settings, python, jobs, scoring, search });
