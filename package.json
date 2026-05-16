@@ -12,6 +12,10 @@
     "build:electron": "tsc -p tsconfig.electron.json",
     "typecheck": "tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.electron.json",
     "test": "vitest run",
+    "verify": "npm run typecheck && npm test && npm run build",
+    "test:crawlers": "cross-env PAPER_PILOT_LIVE_CRAWLER_SMOKE=1 PAPER_PILOT_BROWSER_SMOKE=1 vitest run tests/crawler-smoke.test.ts --testTimeout=240000",
+    "test:crawlers:api": "cross-env PAPER_PILOT_LIVE_CRAWLER_SMOKE=1 vitest run tests/crawler-smoke.test.ts --testTimeout=120000",
+    "test:crawlers:browser": "cross-env PAPER_PILOT_BROWSER_SMOKE=1 vitest run tests/crawler-smoke.test.ts --testTimeout=240000",
     "start": "electron .",
     "package": "npm run build && electron-builder"
   },
@@ -46,8 +50,12 @@
     "framer-motion": "^12.23.24",
     "jotai": "^2.15.1",
     "lucide-react": "^0.562.0",
+    "pdf-parse": "^2.4.5",
+    "pdfjs-dist": "^5.4.296",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
     "sqlite-vec": "^0.1.9",
     "zod": "^4.2.0"
   },

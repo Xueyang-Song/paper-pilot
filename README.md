@@ -85,6 +85,7 @@ npm run build           # Typecheck, build Electron main/preload, build renderer
 npm run build:electron  # Build Electron main/preload only
 npm run typecheck       # Run TypeScript checks
 npm test                # Run Vitest tests
+npm run test:crawlers   # Run opt-in live API and Playwright browser crawler smokes
 npm start               # Launch Electron from built output
 npm run package         # Build and package with electron-builder
 ```
@@ -215,6 +216,14 @@ Current tests cover:
 - Policy approval rules
 - Local Ollama-style tool loop with mocked HTTP
 - Open-access PDF artifact storage
+
+Opt-in crawler smoke tests are available for the slower/live paths:
+
+```bash
+npm run test:crawlers:api      # Live no-key HTTP source smoke
+npm run test:crawlers:browser  # Playwright/Chromium browser smoke against a local Scholar-shaped fixture
+npm run test:crawlers          # Both crawler smokes
+```
 
 Manual smoke tests that have been run in this workspace:
 
