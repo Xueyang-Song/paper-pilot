@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Bot, FileText, Loader2, Search, Send, TerminalSquare } from "lucide-react";
+import { Bot, Download, FileText, Loader2, Paperclip, RotateCcw, Search, Send, Trash2 } from "lucide-react";
 import type { FormEvent, JSX } from "react";
 import { useEffect, useRef, useState } from "react";
 import type { Message } from "../../shared/schemas";
@@ -35,6 +35,30 @@ export function ChatWorkspace(props: {
       void queryClient.invalidateQueries({ queryKey: ["bundle", response.project.id] });
     }
   });
+  const clearChat = useMutation({
+    mutationFn: () => {
+      if (!props.activeProjectId) throw new Error("Select a project before clearing chat.");
+      return window.paperPilot.clearChat({ projectId: props.activeProjectId });
+    },
+    onSuccess: () => {
+      if (props.activeProjectId) void queryClient.invalidateQueries({ queryKey: ["bundle", props.activeProjectId] });
+    }
+  });
+  const exportChat = useMutation({
+    mutationFn: () => {
+      if (!props.activeProjectId) throw new Error("Select a project before exporting chat.");
+      return window.paperPilot.exportChat({ projectId: props.activeProjectId });
+    }
+  });
+  const importArtifacts = useMutation({
+    mutationFn: () => {
+      if (!props.activeProjectId) throw new Error("Select a project before attaching files.");
+      return window.paperPilot.importArtifacts({ projectId: props.activeProjectId });
+    },
+    onSuccess: () => {
+      if (props.activeProjectId) void queryClient.invalidateQueries({ queryKey: ["bundle", props.activeProjectId] });
+    }
+  });
 
   function submit(event: FormEvent): void {
     event.preventDefault();
@@ -44,6 +68,7 @@ export function ChatWorkspace(props: {
   }
 
   const messages = props.bundle?.messages ?? [];
+  const lastUserMessage = [...messages].reverse().find((message) => message.role === "user");
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -120,6 +145,47 @@ export function ChatWorkspace(props: {
                 >
                   <Search size={16} />
                   Crawl
+                </button>
+                <button
+                  type="button"
+                  onClick={() => importArtifacts.mutate()}
+                  disabled={!props.activeProjectId || importArtifacts.isPending}
+                  className="inline-flex h-9 items-center gap-2 rounded-md border border-stone-300 px-3 text-sm text-stone-700 transition hover:bg-stone-100 disabled:opacity-50"
+                >
+                  {importArtifacts.isPending ? <Loader2 size={16} className="animate-spin" /> : <Paperclip size={16} />}
+                  Attach
+                </button>
+                <button
+                  type="button"
+                  onClick={() => lastUserMessage && setDraft(lastUserMessage.content)}
+                  disabled={!lastUserMessage}
+                  className="grid size-9 place-items-center rounded-md border border-stone-300 text-stone-700 transition hover:bg-stone-100 disabled:opacity-50"
+                  title="Retry last request"
+                  aria-label="Retry last request"
+                >
+                  <RotateCcw size={16} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => exportChat.mutate()}
+                  disabled={!props.activeProjectId || !messages.length || exportChat.isPending}
+                  className="grid size-9 place-items-center rounded-md border border-stone-300 text-stone-700 transition hover:bg-stone-100 disabled:opacity-50"
+                  title="Export conversation"
+                  aria-label="Export conversation"
+                >
+                  <Download size={16} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (window.confirm("Clear this conversation? Project files and papers will remain.")) clearChat.mutate();
+                  }}
+                  disabled={!props.activeProjectId || !messages.length || clearChat.isPending}
+                  className="grid size-9 place-items-center rounded-md border border-[#e9b4c1] text-[#7b2d43] transition hover:bg-[#f3d4dc] disabled:opacity-50"
+                  title="Clear conversation"
+                  aria-label="Clear conversation"
+                >
+                  <Trash2 size={16} />
                 </button>
               </div>
               <button

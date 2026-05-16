@@ -21,6 +21,8 @@ export function SearchPanel({
 }): JSX.Element {
   const [query, setQuery] = useState("");
   const [scopeType, setScopeType] = useState<SearchScopeType>(activeProject ? "project" : "global");
+  const [kindFilter, setKindFilter] = useState<"all" | "paper" | "chunk">("all");
+  const [recentQueries, setRecentQueries] = useState<string[]>(() => readRecentQueries());
   const inputRef = useRef<HTMLInputElement>(null);
   const debouncedQuery = useDebouncedValue(query.trim(), 220);
   useEffect(() => {
@@ -52,6 +54,15 @@ export function SearchPanel({
     queryFn: () => window.paperPilot.search({ query: debouncedQuery, scope, limit: 40 }),
     enabled: debouncedQuery.length >= 2
   });
+  useEffect(() => {
+    if (debouncedQuery.length < 2 || searchQuery.isLoading) return;
+    setRecentQueries((current) => {
+      const next = [debouncedQuery, ...current.filter((item) => item !== debouncedQuery)].slice(0, 6);
+      window.localStorage.setItem("paper-pilot:recent-searches", JSON.stringify(next));
+      return next;
+    });
+  }, [debouncedQuery, searchQuery.isLoading]);
+  const displayedResults = (searchQuery.data?.results ?? []).filter((result) => kindFilter === "all" || result.kind === kindFilter);
   const scopeOptions: Array<{ type: SearchScopeType; label: string; disabled: boolean }> = [
     { type: "global", label: "Global", disabled: false },
     { type: "project", label: "Project", disabled: !activeProject },
@@ -103,6 +114,30 @@ export function SearchPanel({
               </button>
             ))}
           </div>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {(["all", "paper", "chunk"] as const).map((kind) => (
+              <button
+                key={kind}
+                type="button"
+                onClick={() => setKindFilter(kind)}
+                className={`h-7 rounded-md border px-2 text-[11px] font-medium transition ${
+                  kindFilter === kind ? "border-[#175c62] bg-[#d8eadf] text-[#175c62]" : "border-stone-300 bg-white text-stone-600"
+                }`}
+              >
+                {kind === "all" ? "All" : kind === "paper" ? "Papers" : "Files"}
+              </button>
+            ))}
+            {recentQueries.map((recent) => (
+              <button
+                key={recent}
+                type="button"
+                onClick={() => setQuery(recent)}
+                className="h-7 max-w-40 truncate rounded-md border border-stone-300 bg-white px-2 text-[11px] text-stone-600 transition hover:border-[#175c62] hover:text-[#175c62]"
+              >
+                {recent}
+              </button>
+            ))}
+          </div>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-3">
           {debouncedQuery.length < 2 ? (
@@ -118,9 +153,9 @@ export function SearchPanel({
             <div className="rounded-md border border-[#e9b4c1] bg-white p-4 text-sm text-[#7b2d43]">
               Search failed. {searchQuery.error.message}
             </div>
-          ) : searchQuery.data?.results.length ? (
+          ) : displayedResults.length ? (
             <div className="space-y-2">
-              {searchQuery.data.results.map((result) => (
+              {displayedResults.map((result) => (
                 <SearchResultRow
                   key={result.id}
                   result={result}
@@ -138,6 +173,14 @@ export function SearchPanel({
       </motion.section>
     </div>
   );
+}
+function readRecentQueries(): string[] {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem("paper-pilot:recent-searches") ?? "[]");
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string").slice(0, 6) : [];
+  } catch {
+    return [];
+  }
 }
 function SearchResultRow({
   result,

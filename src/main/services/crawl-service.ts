@@ -16,6 +16,7 @@ import type { CredentialService } from "./credential-service.js";
 import type { FullTextService } from "./full-text-service.js";
 import type { JobQueue } from "./job-queue.js";
 import type { PaperScoringService } from "./paper-scoring-service.js";
+import type { SettingsService } from "./settings-service.js";
 import { requiresApproval } from "./policy.js";
 
 export interface CrawlRunResult {
@@ -34,7 +35,8 @@ export class CrawlService {
     private readonly jobs: JobQueue,
     private readonly browserCrawler?: BrowserCrawlerService,
     private readonly fullText?: FullTextService,
-    private readonly scoring?: PaperScoringService
+    private readonly scoring?: PaperScoringService,
+    private readonly settings?: SettingsService
   ) {}
 
   async runCrawl(
@@ -44,11 +46,16 @@ export class CrawlService {
   ): Promise<CrawlRunResult> {
     const project = this.db.getProject(projectId);
     if (!project) throw new Error(`Project not found: ${projectId}`);
-    const config = crawlConfigSchema.parse({
+    let config = crawlConfigSchema.parse({
       topic: project.topic ?? input.topic ?? "scientific literature",
       ...input,
       maxPapers: Math.min(input.maxPapers ?? project.policy.maxCrawlPapers, project.policy.maxCrawlPapers)
     });
+    const disabledSourceIds = new Set((await this.settings?.get())?.sources.disabledSourceIds ?? []);
+    if (!input.sourceIds?.length && disabledSourceIds.size) {
+      const sourceIds = config.sourceIds.filter((sourceId) => !disabledSourceIds.has(sourceId));
+      if (sourceIds.length) config = { ...config, sourceIds };
+    }
     const browserSelected = config.sourceIds.includes("google-scholar");
     if (!options.approved && (requiresApproval(project.policy, "source-crawl") || browserSelected)) {
       const waiting = this.jobs.create({

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { Brain, CheckCircle2, Database, KeyRound, Loader2, RefreshCw, Search, ShieldCheck, X } from "lucide-react";
+import { Brain, CheckCircle2, Database, KeyRound, Loader2, RefreshCw, Search, ShieldCheck, Trash2, X } from "lucide-react";
 import type { JSX } from "react";
 import { useEffect, useMemo, useState } from "react";
 import type { AiProviderHealth, AppSettings, Project, SourceDefinition, SourceId } from "../../shared/schemas";
@@ -49,6 +49,18 @@ export function SettingsPanel({
     }
   });
 
+  const removeCredential = useMutation({
+    mutationFn: () => window.paperPilot.removeCredential({ sourceId: selectedSource, label: "default" }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["credentialFlags"] });
+      void queryClient.invalidateQueries({ queryKey: ["settings"] });
+    }
+  });
+
+  const testCredential = useMutation({
+    mutationFn: () => window.paperPilot.testCredential({ sourceId: selectedSource, label: "default" })
+  });
+
   const saveSettings = useMutation({
     mutationFn: () =>
       window.paperPilot.updateSettings({
@@ -85,17 +97,33 @@ export function SettingsPanel({
     }
   });
 
+  const updateSources = useMutation({
+    mutationFn: (disabledSourceIds: SourceId[]) =>
+      window.paperPilot.updateSettings({
+        sources: { disabledSourceIds }
+      }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["settings"] })
+  });
+
   const flags = flagsQuery.data ?? [];
   const credentialed = useMemo(() => new Set(flags.map((flag) => flag.sourceId)), [flags]);
   const candidateHealth = checkProvider.data ?? aiHealth;
   const displayedHealth =
     candidateHealth?.provider === provider && candidateHealth.baseUrl === baseUrl && candidateHealth.model === model ? candidateHealth : undefined;
+  const disabledSourceIds = new Set(settingsQuery.data?.sources.disabledSourceIds ?? []);
 
   function changeProvider(nextProvider: AppSettings["ai"]["provider"]): void {
     setProvider(nextProvider);
     const defaults = providerDefaults[nextProvider];
     setBaseUrl(defaults.baseUrl);
     setModel(defaults.model);
+  }
+
+  function toggleSource(sourceId: SourceId, enabled: boolean): void {
+    const next = new Set(disabledSourceIds);
+    if (enabled) next.delete(sourceId);
+    else next.add(sourceId);
+    updateSources.mutate([...next]);
   }
 
   return (
@@ -130,6 +158,15 @@ export function SettingsPanel({
             <input value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} className="field-input" />
             <label className="field-label">Model</label>
             <input value={model} onChange={(event) => setModel(event.target.value)} className="field-input" />
+            {displayedHealth?.models.length ? (
+              <select value={model} onChange={(event) => setModel(event.target.value)} className="field-input">
+                {displayedHealth.models.map((modelName) => (
+                  <option key={modelName} value={modelName}>
+                    {modelName}
+                  </option>
+                ))}
+              </select>
+            ) : null}
             <div className="grid grid-cols-2 gap-2">
               <button type="button" onClick={() => saveSettings.mutate()} className="primary-button">
                 Save AI settings
@@ -199,6 +236,16 @@ export function SettingsPanel({
             ) : null}
           </PanelSection>
 
+          <PanelSection icon={<Database size={17} />} title="Data">
+            <button
+              type="button"
+              onClick={() => void window.paperPilot.openDataFolder()}
+              className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-md border border-stone-300 bg-white px-3 text-sm font-medium text-stone-700 transition hover:border-[#175c62] hover:text-[#175c62]"
+            >
+              Open data folder
+            </button>
+          </PanelSection>
+
           <PanelSection icon={<KeyRound size={17} />} title="Credentials">
             <select
               value={selectedSource}
@@ -223,6 +270,37 @@ export function SettingsPanel({
             <button type="button" onClick={() => saveCredential.mutate()} disabled={!secret.trim()} className="primary-button">
               Save credential
             </button>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => testCredential.mutate()}
+                disabled={testCredential.isPending}
+                className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-stone-300 bg-white px-3 text-sm font-medium text-stone-700 transition hover:border-[#175c62] hover:text-[#175c62] disabled:opacity-50"
+              >
+                {testCredential.isPending ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+                Test
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (window.confirm(`Remove the stored credential for ${selectedSource}?`)) removeCredential.mutate();
+                }}
+                disabled={!credentialed.has(selectedSource) || removeCredential.isPending}
+                className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-[#e9b4c1] bg-white px-3 text-sm font-medium text-[#7b2d43] transition hover:border-[#7b2d43] disabled:opacity-50"
+              >
+                <Trash2 size={14} />
+                Remove
+              </button>
+            </div>
+            {testCredential.data ? (
+              <div
+                className={`rounded-md border px-3 py-2 text-xs ${
+                  testCredential.data.ok ? "border-[#8aa66a] bg-[#edf4dc] text-[#476629]" : "border-[#d2b05f] bg-[#fbf0c9] text-[#77581b]"
+                }`}
+              >
+                {testCredential.data.detail}
+              </div>
+            ) : null}
           </PanelSection>
 
           <PanelSection icon={<Search size={17} />} title="Sources">
@@ -234,13 +312,24 @@ export function SettingsPanel({
                       <div className="truncate text-sm font-medium">{source.displayName}</div>
                       <div className="mt-1 text-xs text-stone-600">{source.kind}</div>
                     </div>
-                    <span
-                      className={`rounded px-2 py-1 text-[11px] ${
-                        source.stable ? "bg-[#d8eadf] text-[#175c62]" : "bg-[#f3d4dc] text-[#7b2d43]"
-                      }`}
-                    >
-                      {source.stable ? "stable" : "experimental"}
-                    </span>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <span
+                        className={`rounded px-2 py-1 text-[11px] ${
+                          source.stable ? "bg-[#d8eadf] text-[#175c62]" : "bg-[#f3d4dc] text-[#7b2d43]"
+                        }`}
+                      >
+                        {source.stable ? "stable" : "experimental"}
+                      </span>
+                      <label className="inline-flex items-center gap-1 text-[11px] text-stone-600">
+                        <input
+                          type="checkbox"
+                          checked={!disabledSourceIds.has(source.id)}
+                          onChange={(event) => toggleSource(source.id, event.target.checked)}
+                          className="size-4 accent-[#175c62]"
+                        />
+                        On
+                      </label>
+                    </div>
                   </div>
                   <div className="mt-2 text-xs leading-5 text-stone-600">{source.description}</div>
                 </div>

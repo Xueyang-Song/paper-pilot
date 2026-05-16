@@ -160,4 +160,35 @@ describe("JobQueue persistence", () => {
     });
     expect(reloadedJobs.get(pending.id)?.result).toEqual({});
   });
+
+  it("cancels active jobs and clears terminal history", () => {
+    const project = db.createProject("Job controls");
+    const jobs = new JobQueue(db);
+    const running = jobs.create({ projectId: project.id, kind: "crawl", status: "running", title: "Running" });
+    jobs.create({ projectId: project.id, kind: "brief", status: "completed", title: "Done" });
+
+    const cancelled = jobs.cancel(running.id);
+    const cleared = jobs.clearTerminal(project.id);
+
+    expect(cancelled.status).toBe("cancelled");
+    expect(cleared).toBe(2);
+    expect(jobs.list(project.id)).toHaveLength(0);
+  });
+
+  it("restores retryable approval jobs to waiting approval", () => {
+    const project = db.createProject("Retry approvals");
+    const jobs = new JobQueue(db);
+    const failed = jobs.create({
+      projectId: project.id,
+      kind: "crawl",
+      status: "failed",
+      title: "Failed approval",
+      result: { approval: { action: "crawl", config: { topic: "biology" } } }
+    });
+
+    const retry = jobs.retry(failed.id);
+
+    expect(retry.status).toBe("waiting-approval");
+    expect(retry.error).toBeUndefined();
+  });
 });

@@ -70,12 +70,12 @@ app.whenReady().then(() => {
   const fullText = new FullTextService(artifacts);
   const scoring = new PaperScoringService(db);
   const search = new SearchService(db, artifacts);
-  const crawl = new CrawlService(db, registry, credentials, artifacts, jobs, browserCrawler, fullText, scoring);
+  const crawl = new CrawlService(db, registry, credentials, artifacts, jobs, browserCrawler, fullText, scoring, settings);
   const ai = new AiService(db, settings, credentials, artifacts, jobs);
   const localAgent = new LocalAgentService(db, registry, crawl, ai, jobs, { settings });
   const agent = new AgentService(db, crawl, ai, artifacts, jobs, localAgent);
 
-  registerIpc({ db, registry, agent, crawl, ai, artifacts, credentials, settings, python, jobs, scoring, search });
+  registerIpc({ db, registry, agent, crawl, ai, artifacts, credentials, settings, python, jobs, scoring, search, dataRoot });
   mainWindow = createWindow();
 
   app.on("activate", () => {

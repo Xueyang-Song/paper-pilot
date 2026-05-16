@@ -1,5 +1,5 @@
-import { copyFile, readFile, writeFile } from "node:fs/promises";
-import { extname, join } from "node:path";
+import { copyFile, readFile, unlink, writeFile } from "node:fs/promises";
+import { basename, extname, join } from "node:path";
 import { PDFParse } from "pdf-parse";
 import type { Artifact, ArtifactType } from "../../shared/schemas.js";
 import type { PaperPilotDb } from "../db.js";
@@ -106,6 +106,42 @@ export class ArtifactService {
     return readFile(artifact.path);
   }
 
+  renameArtifact(projectId: string, artifactId: string, title: string): Artifact {
+    return this.db.updateArtifact(projectId, artifactId, { title });
+  }
+
+  async deleteArtifact(projectId: string, artifactId: string): Promise<Artifact> {
+    const artifact = this.db.deleteArtifact(projectId, artifactId);
+    await unlink(artifact.path).catch(() => undefined);
+    return artifact;
+  }
+
+  async exportArtifacts(input: { projectId: string; artifactIds: string[]; targetDir: string }): Promise<{ exported: number; paths: string[] }> {
+    const artifacts = input.artifactIds
+      .map((artifactId) => this.db.getArtifact(input.projectId, artifactId))
+      .filter((artifact): artifact is Artifact => Boolean(artifact));
+    const paths: string[] = [];
+    await ensureDir(input.targetDir);
+    for (const artifact of artifacts) {
+      const targetPath = join(input.targetDir, `${safeFilename(artifact.title)}-${artifact.id}${extname(artifact.path) || defaultExtension(artifact.type)}`);
+      await copyFile(artifact.path, targetPath);
+      paths.push(targetPath);
+    }
+    return { exported: paths.length, paths };
+  }
+
+  async importUnknownFile(input: { projectId: string; sourcePath: string; title?: string; source?: string }): Promise<Artifact> {
+    const type = artifactTypeFromPath(input.sourcePath);
+    return this.importFile({
+      projectId: input.projectId,
+      sourcePath: input.sourcePath,
+      title: input.title?.trim() || basename(input.sourcePath),
+      type,
+      source: input.source ?? "manual-import",
+      metadata: { sourcePath: input.sourcePath }
+    });
+  }
+
   async indexArtifact(artifact: Artifact, options: { replace?: boolean } = {}): Promise<{ chunkCount: number; warning?: string }> {
     const content = await readFile(artifact.path);
     return this.indexArtifactContent(artifact, content, options);
@@ -158,6 +194,26 @@ function defaultExtension(type: ArtifactType): string {
       return ".csv";
     default:
       return ".md";
+  }
+}
+
+function artifactTypeFromPath(path: string): ArtifactType {
+  switch (extname(path).toLowerCase()) {
+    case ".json":
+      return "metadata-json";
+    case ".pdf":
+      return "paper-pdf";
+    case ".md":
+    case ".markdown":
+    case ".txt":
+      return "markdown";
+    case ".py":
+      return "script";
+    case ".csv":
+    case ".tsv":
+      return "table";
+    default:
+      return "markdown";
   }
 }
 

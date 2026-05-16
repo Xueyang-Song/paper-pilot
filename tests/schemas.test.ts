@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { crawlConfigSchema, paperDedupeKey } from "../src/shared/schemas";
+import { appSettingsSchema, crawlConfigSchema, paperDedupeKey } from "../src/shared/schemas";
 
 describe("shared schemas", () => {
   it("applies crawl defaults", () => {
@@ -12,5 +12,13 @@ describe("shared schemas", () => {
   it("dedupes DOI before title", () => {
     expect(paperDedupeKey({ doi: "https://doi.org/10.1000/ABC", title: "A Paper" })).toBe("doi:10.1000/abc");
     expect(paperDedupeKey({ title: "A: Paper!" })).toBe("title:a paper");
+  });
+
+  it("defaults source preferences", () => {
+    const settings = appSettingsSchema.parse({
+      ai: { provider: "ollama", baseUrl: "http://127.0.0.1:11434", model: "gemma3:12b-it-qat" },
+      python: { runtimeMode: "managed" }
+    });
+    expect(settings.sources.disabledSourceIds).toEqual([]);
   });
 });

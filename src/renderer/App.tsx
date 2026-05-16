@@ -95,6 +95,60 @@ function App(): JSX.Element {
     }
   });
 
+  const updateProject = useMutation({
+    mutationFn: (input: { projectId: string; title?: string; topic?: string; description?: string }) => window.paperPilot.updateProject(input),
+    onSuccess: (project) => {
+      queryClient.setQueryData(["bundle", project.id], (bundle: typeof bundleQuery.data) =>
+        bundle?.project.id === project.id ? { ...bundle, project } : bundle
+      );
+      void queryClient.invalidateQueries({ queryKey: ["projects"] });
+      void queryClient.invalidateQueries({ queryKey: ["bundle", project.id] });
+    }
+  });
+
+  const pinProject = useMutation({
+    mutationFn: (input: { projectId: string; pinned: boolean }) => window.paperPilot.setProjectPinned(input),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["projects"] })
+  });
+
+  const archiveProject = useMutation({
+    mutationFn: (input: { projectId: string; archived: boolean }) => window.paperPilot.setProjectArchived(input),
+    onSuccess: (project) => {
+      void queryClient.invalidateQueries({ queryKey: ["projects"] });
+      void queryClient.invalidateQueries({ queryKey: ["bundle", project.id] });
+    }
+  });
+
+  const deleteProject = useMutation({
+    mutationFn: (projectId: string) => window.paperPilot.deleteProject({ projectId }),
+    onSuccess: (_result, projectId) => {
+      const remaining = (projectsQuery.data ?? []).filter((project) => project.id !== projectId);
+      if (activeProjectId === projectId) setActiveProjectId(remaining[0]?.id);
+      queryClient.removeQueries({ queryKey: ["bundle", projectId] });
+      void queryClient.invalidateQueries({ queryKey: ["projects"] });
+    }
+  });
+
+  const duplicateProject = useMutation({
+    mutationFn: (projectId: string) => window.paperPilot.duplicateProject({ projectId }),
+    onSuccess: (project) => {
+      setActiveProjectId(project.id);
+      void queryClient.invalidateQueries({ queryKey: ["projects"] });
+    }
+  });
+
+  const exportProject = useMutation({
+    mutationFn: (projectId: string) => window.paperPilot.exportProject({ projectId })
+  });
+
+  const importProject = useMutation({
+    mutationFn: () => window.paperPilot.importProject(),
+    onSuccess: (project) => {
+      if (project) setActiveProjectId(project.id);
+      void queryClient.invalidateQueries({ queryKey: ["projects"] });
+    }
+  });
+
   const activeBundle = bundleQuery.data?.project.id === activeProjectId ? bundleQuery.data : undefined;
   const artifacts = activeBundle?.artifacts ?? [];
 
@@ -107,6 +161,13 @@ function App(): JSX.Element {
           onSelect={setActiveProjectId}
           onCreate={() => createProject.mutate()}
           onRename={(projectId, title) => renameProject.mutateAsync({ projectId, title })}
+          onUpdate={(input) => updateProject.mutateAsync(input)}
+          onPin={(projectId, pinned) => pinProject.mutateAsync({ projectId, pinned })}
+          onArchive={(projectId, archived) => archiveProject.mutateAsync({ projectId, archived })}
+          onDelete={(projectId) => deleteProject.mutateAsync(projectId)}
+          onDuplicate={(projectId) => duplicateProject.mutateAsync(projectId)}
+          onExport={(projectId) => exportProject.mutateAsync(projectId)}
+          onImport={() => importProject.mutateAsync()}
         />
         <section className="relative flex min-h-0 min-w-0 flex-col border-l border-stone-300/80 bg-[#fbfaf6]">
           <TopBar

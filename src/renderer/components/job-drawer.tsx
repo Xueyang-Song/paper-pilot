@@ -1,11 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { Gauge, Loader2, Play } from "lucide-react";
+import { Gauge, History, Loader2, Play, RotateCcw, Trash2, XCircle } from "lucide-react";
 import type { JSX } from "react";
+import { useState } from "react";
 import type { Job } from "../../shared/schemas";
 
 export function JobDrawer({ projectId, initialJobs }: { projectId?: string; initialJobs: Job[] }): JSX.Element {
   const queryClient = useQueryClient();
+  const [showHistory, setShowHistory] = useState(false);
   const jobsQuery = useQuery({
     queryKey: ["jobs", projectId],
     queryFn: () => window.paperPilot.listJobs(projectId),
@@ -30,12 +32,48 @@ export function JobDrawer({ projectId, initialJobs }: { projectId?: string; init
       }
     }
   });
+  const cancelJob = useMutation({
+    mutationFn: (jobId: string) => window.paperPilot.cancelJob(jobId),
+    onSuccess: () => refreshJobs(projectId, queryClient)
+  });
+  const retryJob = useMutation({
+    mutationFn: (jobId: string) => window.paperPilot.retryJob(jobId),
+    onSuccess: () => refreshJobs(projectId, queryClient)
+  });
+  const clearTerminalJobs = useMutation({
+    mutationFn: () => window.paperPilot.clearTerminalJobs(projectId),
+    onSuccess: () => refreshJobs(projectId, queryClient)
+  });
   const jobs = jobsQuery.data ?? [];
   const active = jobs.filter((job) => job.status === "running" || job.status === "waiting-approval");
-  if (!active.length) return <div className="pointer-events-none absolute bottom-3 right-[360px]" />;
+  const visibleJobs = showHistory ? jobs.slice(0, 8) : active.slice(0, 3);
+  if (!active.length && !jobs.length) return <div className="pointer-events-none absolute bottom-3 right-[360px]" />;
   return (
     <div className="absolute bottom-4 right-[360px] z-20 w-80 space-y-2">
-      {active.slice(0, 3).map((job) => (
+      <div className="flex justify-end gap-2">
+        {jobs.length ? (
+          <button
+            type="button"
+            onClick={() => setShowHistory((current) => !current)}
+            className="inline-flex h-8 items-center gap-2 rounded-md border border-stone-300 bg-white px-3 text-xs font-medium text-stone-700 shadow-sm transition hover:border-[#175c62] hover:text-[#175c62]"
+          >
+            <History size={13} />
+            {showHistory ? "Active" : "History"}
+          </button>
+        ) : null}
+        {showHistory ? (
+          <button
+            type="button"
+            onClick={() => clearTerminalJobs.mutate()}
+            disabled={clearTerminalJobs.isPending}
+            className="inline-flex h-8 items-center gap-2 rounded-md border border-stone-300 bg-white px-3 text-xs font-medium text-stone-700 shadow-sm transition hover:border-[#175c62] hover:text-[#175c62] disabled:opacity-50"
+          >
+            <Trash2 size={13} />
+            Clear done
+          </button>
+        ) : null}
+      </div>
+      {visibleJobs.map((job) => (
         <motion.div
           key={job.id}
           initial={{ opacity: 0, y: 12 }}
@@ -74,8 +112,41 @@ export function JobDrawer({ projectId, initialJobs }: { projectId?: string; init
               </button>
             </div>
           ) : null}
+          {job.status === "running" || job.status === "queued" ? (
+            <div className="mt-3">
+              <button
+                type="button"
+                onClick={() => cancelJob.mutate(job.id)}
+                disabled={cancelJob.isPending}
+                className="inline-flex h-8 w-full items-center justify-center gap-2 rounded-md border border-[#e9b4c1] px-3 text-xs font-medium text-[#7b2d43] transition hover:border-[#7b2d43] disabled:opacity-50"
+              >
+                <XCircle size={13} />
+                Cancel
+              </button>
+            </div>
+          ) : null}
+          {job.status === "failed" || job.status === "cancelled" ? (
+            <div className="mt-3">
+              <button
+                type="button"
+                onClick={() => retryJob.mutate(job.id)}
+                disabled={retryJob.isPending}
+                className="inline-flex h-8 w-full items-center justify-center gap-2 rounded-md border border-stone-300 px-3 text-xs font-medium text-stone-700 transition hover:bg-stone-100 disabled:opacity-50"
+              >
+                <RotateCcw size={13} />
+                Retry
+              </button>
+            </div>
+          ) : null}
+          {job.error ? <div className="mt-2 line-clamp-3 text-xs text-[#7b2d43]">{job.error}</div> : null}
         </motion.div>
       ))}
     </div>
   );
+}
+
+function refreshJobs(projectId: string | undefined, queryClient: ReturnType<typeof useQueryClient>): void {
+  if (!projectId) return;
+  void queryClient.invalidateQueries({ queryKey: ["jobs", projectId] });
+  void queryClient.invalidateQueries({ queryKey: ["bundle", projectId] });
 }

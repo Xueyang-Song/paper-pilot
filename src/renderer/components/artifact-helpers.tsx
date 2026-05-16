@@ -7,6 +7,7 @@ export interface ArtifactScoreTarget {
   title: string;
   subtitle: string;
   sourceLabel?: string;
+  paper?: Paper;
   score?: PaperScore;
 }
 export interface ArtifactRow {
@@ -55,6 +56,7 @@ function getArtifactScoreTarget(
       title: paper.title,
       subtitle: paper.score ? "Paper score" : "Paper score not calculated",
       sourceLabel: formatSourceName(paper.source),
+      paper,
       score: paper.score
     };
   }

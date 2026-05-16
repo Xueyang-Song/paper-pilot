@@ -66,6 +66,42 @@ export class JobQueue extends EventEmitter {
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }
 
+  cancel(jobId: string): Job {
+    const current = this.get(jobId);
+    if (!current) throw new Error(`Job not found: ${jobId}`);
+    if (["completed", "failed", "cancelled"].includes(current.status)) return current;
+    return this.update(jobId, {
+      status: "cancelled",
+      progress: 1,
+      detail: current.status === "running" ? "Cancellation requested by user." : "Cancelled by user.",
+      error: current.status === "running" ? "The running operation may finish in the background if the underlying tool cannot be interrupted." : undefined
+    });
+  }
+
+  retry(jobId: string): Job {
+    const current = this.get(jobId);
+    if (!current) throw new Error(`Job not found: ${jobId}`);
+    const approval = current.result?.approval as { action?: string } | undefined;
+    if (approval?.action) {
+      return this.update(jobId, {
+        status: "waiting-approval",
+        progress: 0,
+        detail: "Retry is waiting for approval.",
+        error: undefined
+      });
+    }
+    throw new Error("This job does not contain enough saved run details to retry automatically.");
+  }
+
+  clearTerminal(projectId?: string): number {
+    const removed = this.list(projectId).filter((job) => ["completed", "failed", "cancelled"].includes(job.status));
+    for (const job of removed) {
+      this.jobs.delete(job.id);
+      this.db?.deleteJob(job.id);
+    }
+    return removed.length;
+  }
+
   onChanged(listener: (job: Job) => void): () => void {
     this.on("changed", listener);
     return () => this.off("changed", listener);

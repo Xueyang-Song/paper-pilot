@@ -16,6 +16,9 @@ const defaults: AppSettings = appSettingsSchema.parse({
   python: {
     runtimeMode: "managed",
     markitdownEnabled: true
+  },
+  sources: {
+    disabledSourceIds: []
   }
 });
 
@@ -40,7 +43,8 @@ export class SettingsService {
     const current = await this.get();
     const next = appSettingsSchema.parse({
       ai: { ...current.ai, ...patch.ai, hasApiKey: this.credentials.has("ai-gateway") },
-      python: { ...current.python, ...patch.python }
+      python: { ...current.python, ...patch.python },
+      sources: { ...current.sources, ...patch.sources }
     });
     await ensureDir(dirname(this.settingsPath));
     await writeFile(this.settingsPath, JSON.stringify(next, null, 2), "utf8");

@@ -84,6 +84,9 @@ export class PaperPilotDb {
         id TEXT PRIMARY KEY,
         title TEXT NOT NULL,
         topic TEXT,
+        description TEXT,
+        archived_at TEXT,
+        pinned_at TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         policy_json TEXT NOT NULL
@@ -135,6 +138,10 @@ export class PaperPilotDb {
         fields_json TEXT NOT NULL,
         score REAL,
         score_json TEXT,
+        favorite INTEGER NOT NULL DEFAULT 0,
+        user_status TEXT NOT NULL DEFAULT 'unread',
+        tags_json TEXT NOT NULL DEFAULT '[]',
+        notes TEXT,
         raw_json TEXT NOT NULL,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
@@ -238,8 +245,15 @@ export class PaperPilotDb {
         created_at TEXT NOT NULL
       );
     `);
+    this.ensureColumn("projects", "description", "TEXT");
+    this.ensureColumn("projects", "archived_at", "TEXT");
+    this.ensureColumn("projects", "pinned_at", "TEXT");
     this.ensureColumn("papers", "score", "REAL");
     this.ensureColumn("papers", "score_json", "TEXT");
+    this.ensureColumn("papers", "favorite", "INTEGER NOT NULL DEFAULT 0");
+    this.ensureColumn("papers", "user_status", "TEXT NOT NULL DEFAULT 'unread'");
+    this.ensureColumn("papers", "tags_json", "TEXT NOT NULL DEFAULT '[]'");
+    this.ensureColumn("papers", "notes", "TEXT");
     if (this.vecAvailable) {
       this.db.exec(`
         CREATE VIRTUAL TABLE IF NOT EXISTS chunk_embeddings_vec USING vec0(
@@ -254,12 +268,13 @@ export class PaperPilotDb {
     return this.vecAvailable;
   }
 
-  createProject(title: string, topic?: string, policy: Partial<ProjectPolicy> = {}): Project {
+  createProject(title: string, topic?: string, policy: Partial<ProjectPolicy> = {}, description?: string): Project {
     const createdAt = nowIso();
     const project: Project = {
       id: id("proj"),
       title,
       topic,
+      description,
       createdAt,
       updatedAt: createdAt,
       policy: { ...defaultPolicy, ...policy }
@@ -267,13 +282,14 @@ export class PaperPilotDb {
     const policyJson = JSON.stringify(project.policy);
     this.db
       .prepare(
-        `INSERT INTO projects (id, title, topic, created_at, updated_at, policy_json)
-         VALUES (@id, @title, @topic, @createdAt, @updatedAt, @policyJson)`
+        `INSERT INTO projects (id, title, topic, description, created_at, updated_at, policy_json)
+         VALUES (@id, @title, @topic, @description, @createdAt, @updatedAt, @policyJson)`
       )
       .run({
         id: project.id,
         title: project.title,
         topic: project.topic ?? null,
+        description: project.description ?? null,
         createdAt: project.createdAt,
         updatedAt: project.updatedAt,
         policyJson
@@ -286,7 +302,14 @@ export class PaperPilotDb {
 
   listProjects(): Project[] {
     return this.db
-      .prepare("SELECT * FROM projects ORDER BY updated_at DESC")
+      .prepare(
+        `SELECT * FROM projects
+         ORDER BY
+           CASE WHEN archived_at IS NULL THEN 0 ELSE 1 END,
+           CASE WHEN pinned_at IS NULL THEN 1 ELSE 0 END,
+           pinned_at DESC,
+           updated_at DESC`
+      )
       .all()
       .map((row) => this.projectFromRow(row as Row));
   }
@@ -312,6 +335,51 @@ export class PaperPilotDb {
     const project = this.getProject(projectId);
     if (!project) throw new Error(`Project not found: ${projectId}`);
     return project;
+  }
+
+  updateProject(input: { projectId: string; title?: string; topic?: string; description?: string }): Project {
+    const project = this.getProject(input.projectId);
+    if (!project) throw new Error(`Project not found: ${input.projectId}`);
+    const title = input.title === undefined ? project.title : input.title.trim();
+    if (!title) throw new Error("Project title cannot be empty.");
+    const topic = input.topic === undefined ? project.topic : normalizeOptional(input.topic);
+    const description = input.description === undefined ? project.description : normalizeOptional(input.description);
+    const updatedAt = nowIso();
+    this.db
+      .prepare("UPDATE projects SET title = ?, topic = ?, description = ?, updated_at = ? WHERE id = ?")
+      .run(title, topic ?? null, description ?? null, updatedAt, input.projectId);
+    const updated = this.getProject(input.projectId);
+    if (!updated) throw new Error(`Project not found: ${input.projectId}`);
+    return updated;
+  }
+
+  setProjectArchived(projectId: string, archived: boolean): Project {
+    const updatedAt = nowIso();
+    const archivedAt = archived ? updatedAt : null;
+    const result = this.db
+      .prepare("UPDATE projects SET archived_at = ?, updated_at = ? WHERE id = ?")
+      .run(archivedAt, updatedAt, projectId);
+    if (result.changes === 0) throw new Error(`Project not found: ${projectId}`);
+    const project = this.getProject(projectId);
+    if (!project) throw new Error(`Project not found: ${projectId}`);
+    return project;
+  }
+
+  setProjectPinned(projectId: string, pinned: boolean): Project {
+    const updatedAt = nowIso();
+    const pinnedAt = pinned ? updatedAt : null;
+    const result = this.db
+      .prepare("UPDATE projects SET pinned_at = ?, updated_at = ? WHERE id = ?")
+      .run(pinnedAt, updatedAt, projectId);
+    if (result.changes === 0) throw new Error(`Project not found: ${projectId}`);
+    const project = this.getProject(projectId);
+    if (!project) throw new Error(`Project not found: ${projectId}`);
+    return project;
+  }
+
+  deleteProject(projectId: string): void {
+    const result = this.db.prepare("DELETE FROM projects WHERE id = ?").run(projectId);
+    if (result.changes === 0) throw new Error(`Project not found: ${projectId}`);
   }
 
   updateProjectPolicy(projectId: string, patch: Partial<ProjectPolicy>): ProjectPolicy {
@@ -364,6 +432,12 @@ export class PaperPilotDb {
       .map((row) => this.messageFromRow(row as Row));
   }
 
+  clearMessages(projectId: string): number {
+    const result = this.db.prepare("DELETE FROM messages WHERE project_id = ?").run(projectId);
+    this.touchProject(projectId);
+    return Number(result.changes);
+  }
+
   savePaper(projectId: string, paperInput: Paper): Paper {
     const paper = paperSchema.parse({ ...paperInput, projectId });
     const createdAt = nowIso();
@@ -391,6 +465,10 @@ export class PaperPilotDb {
       fieldsJson: JSON.stringify(paper.fieldsOfStudy),
       score: paper.score?.overall ?? null,
       scoreJson: paper.score ? JSON.stringify(paper.score) : null,
+      favorite: paper.favorite ? 1 : 0,
+      userStatus: paper.userStatus ?? "unread",
+      tagsJson: JSON.stringify(paper.tags ?? []),
+      notes: paper.notes ?? null,
       rawJson: JSON.stringify(paper.raw ?? {}),
       createdAt,
       updatedAt: createdAt
@@ -400,11 +478,11 @@ export class PaperPilotDb {
         `INSERT INTO papers (
           id, project_id, dedupe_key, title, normalized_title, abstract, authors_json, year,
           published_at, doi, url, pdf_url, source, source_paper_id, venue, citation_count,
-          is_open_access, license, fields_json, score, score_json, raw_json, created_at, updated_at
+          is_open_access, license, fields_json, score, score_json, favorite, user_status, tags_json, notes, raw_json, created_at, updated_at
         ) VALUES (
           @id, @projectId, @dedupeKey, @title, @normalizedTitle, @abstract, @authorsJson, @year,
           @publishedAt, @doi, @url, @pdfUrl, @source, @sourcePaperId, @venue, @citationCount,
-          @isOpenAccess, @license, @fieldsJson, @score, @scoreJson, @rawJson, @createdAt, @updatedAt
+          @isOpenAccess, @license, @fieldsJson, @score, @scoreJson, @favorite, @userStatus, @tagsJson, @notes, @rawJson, @createdAt, @updatedAt
         )
         ON CONFLICT(project_id, dedupe_key) DO UPDATE SET
           abstract = COALESCE(excluded.abstract, papers.abstract),
@@ -454,6 +532,84 @@ export class PaperPilotDb {
     return this.paperFromRow(row);
   }
 
+  updatePaper(projectId: string, paperId: string, patch: Partial<Paper>): Paper {
+    const currentRow = this.db.prepare("SELECT * FROM papers WHERE project_id = ? AND id = ?").get(projectId, paperId) as Row | undefined;
+    if (!currentRow) throw new Error(`Paper not found: ${paperId}`);
+    const current = this.paperFromRow(currentRow);
+    const next = paperSchema.parse({ ...current, ...patch, projectId, id: paperId });
+    const dedupeKey = paperDedupeKey(next);
+    const normalizedTitle = dedupeKey.startsWith("title:") ? dedupeKey.slice(6) : next.title.toLowerCase();
+    const updatedAt = nowIso();
+    this.db
+      .prepare(
+        `UPDATE papers SET
+          dedupe_key = @dedupeKey,
+          title = @title,
+          normalized_title = @normalizedTitle,
+          abstract = @abstract,
+          authors_json = @authorsJson,
+          year = @year,
+          published_at = @publishedAt,
+          doi = @doi,
+          url = @url,
+          pdf_url = @pdfUrl,
+          venue = @venue,
+          citation_count = @citationCount,
+          is_open_access = @isOpenAccess,
+          license = @license,
+          fields_json = @fieldsJson,
+          favorite = @favorite,
+          user_status = @userStatus,
+          tags_json = @tagsJson,
+          notes = @notes,
+          updated_at = @updatedAt
+         WHERE project_id = @projectId AND id = @paperId`
+      )
+      .run({
+        projectId,
+        paperId,
+        dedupeKey,
+        title: next.title,
+        normalizedTitle,
+        abstract: next.abstract ?? null,
+        authorsJson: JSON.stringify(next.authors),
+        year: next.year ?? null,
+        publishedAt: next.publishedAt ?? null,
+        doi: next.doi ?? null,
+        url: next.url ?? null,
+        pdfUrl: next.pdfUrl ?? null,
+        venue: next.venue ?? null,
+        citationCount: next.citationCount ?? null,
+        isOpenAccess: next.isOpenAccess ? 1 : 0,
+        license: next.license ?? null,
+        fieldsJson: JSON.stringify(next.fieldsOfStudy),
+        favorite: next.favorite ? 1 : 0,
+        userStatus: next.userStatus ?? "unread",
+        tagsJson: JSON.stringify(next.tags ?? []),
+        notes: next.notes ?? null,
+        updatedAt
+      });
+    const row = this.db.prepare("SELECT * FROM papers WHERE project_id = ? AND id = ?").get(projectId, paperId) as Row | undefined;
+    if (!row) throw new Error(`Paper not found: ${paperId}`);
+    this.indexPaperRow(row);
+    this.touchProject(projectId);
+    return this.paperFromRow(row);
+  }
+
+  deletePaper(projectId: string, paperId: string): void {
+    this.db.exec("BEGIN");
+    try {
+      this.db.prepare("DELETE FROM papers_fts WHERE paper_id = ?").run(paperId);
+      const result = this.db.prepare("DELETE FROM papers WHERE project_id = ? AND id = ?").run(projectId, paperId);
+      if (result.changes === 0) throw new Error(`Paper not found: ${paperId}`);
+      this.db.exec("COMMIT");
+      this.touchProject(projectId);
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
   saveArtifact(artifact: Artifact): Artifact {
     const parsed = artifactSchema.parse(artifact);
     this.db
@@ -500,6 +656,31 @@ export class PaperPilotDb {
       .prepare("SELECT * FROM artifacts WHERE project_id = ? AND id = ?")
       .get(projectId, artifactId) as Row | undefined;
     return row ? this.artifactFromRow(row) : undefined;
+  }
+
+  updateArtifact(projectId: string, artifactId: string, patch: Partial<Pick<Artifact, "title" | "metadata">>): Artifact {
+    const artifact = this.getArtifact(projectId, artifactId);
+    if (!artifact) throw new Error(`Artifact not found: ${artifactId}`);
+    const title = patch.title === undefined ? artifact.title : patch.title.trim();
+    if (!title) throw new Error("Artifact title cannot be empty.");
+    const metadata = patch.metadata === undefined ? artifact.metadata : patch.metadata;
+    this.db
+      .prepare("UPDATE artifacts SET title = ?, metadata_json = ? WHERE project_id = ? AND id = ?")
+      .run(title, JSON.stringify(metadata), projectId, artifactId);
+    this.touchProject(projectId);
+    const updated = this.getArtifact(projectId, artifactId);
+    if (!updated) throw new Error(`Artifact not found: ${artifactId}`);
+    return updated;
+  }
+
+  deleteArtifact(projectId: string, artifactId: string): Artifact {
+    const artifact = this.getArtifact(projectId, artifactId);
+    if (!artifact) throw new Error(`Artifact not found: ${artifactId}`);
+    this.clearDocumentChunksForArtifact(artifactId);
+    const result = this.db.prepare("DELETE FROM artifacts WHERE project_id = ? AND id = ?").run(projectId, artifactId);
+    if (result.changes === 0) throw new Error(`Artifact not found: ${artifactId}`);
+    this.touchProject(projectId);
+    return artifact;
   }
 
   saveJob(job: Job): Job {
@@ -551,6 +732,19 @@ export class PaperPilotDb {
     return rows.map((row) => this.jobFromRow(row));
   }
 
+  deleteJob(jobId: string): void {
+    this.db.prepare("DELETE FROM jobs WHERE id = ?").run(jobId);
+  }
+
+  clearTerminalJobs(projectId?: string): number {
+    const statuses = ["completed", "failed", "cancelled"];
+    const placeholders = statuses.map(() => "?").join(", ");
+    const result = projectId
+      ? this.db.prepare(`DELETE FROM jobs WHERE project_id = ? AND status IN (${placeholders})`).run(projectId, ...statuses)
+      : this.db.prepare(`DELETE FROM jobs WHERE status IN (${placeholders})`).run(...statuses);
+    return Number(result.changes);
+  }
+
   markInterruptedJobs(): Job[] {
     const rows = this.db.prepare("SELECT * FROM jobs WHERE status IN ('queued', 'running')").all() as Row[];
     if (!rows.length) return [];
@@ -595,6 +789,11 @@ export class PaperPilotDb {
     return this.db
       .prepare("SELECT source_id as sourceId, label, updated_at as updatedAt FROM source_credentials ORDER BY source_id, label")
       .all() as Array<{ sourceId: string; label: string; updatedAt: string }>;
+  }
+
+  deleteCredential(sourceId: string, label = "default"): boolean {
+    const result = this.db.prepare("DELETE FROM source_credentials WHERE source_id = ? AND label = ?").run(sourceId, label);
+    return result.changes > 0;
   }
 
   addDocumentChunks(input: {
@@ -921,6 +1120,9 @@ export class PaperPilotDb {
       id: row.id,
       title: row.title,
       topic: row.topic ?? undefined,
+      description: row.description ?? undefined,
+      archivedAt: row.archived_at ?? undefined,
+      pinnedAt: row.pinned_at ?? undefined,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
       policy: { ...defaultPolicy, ...JSON.parse(String(row.policy_json)) }
@@ -958,6 +1160,10 @@ export class PaperPilotDb {
       license: row.license ?? undefined,
       fieldsOfStudy: JSON.parse(String(row.fields_json)),
       score: parsePaperScore(row.score_json),
+      favorite: Boolean(row.favorite),
+      userStatus: row.user_status ?? "unread",
+      tags: parseJsonArray(row.tags_json),
+      notes: row.notes ?? undefined,
       raw: JSON.parse(String(row.raw_json))
     });
   }
@@ -1012,6 +1218,11 @@ function parseJsonArray(value: unknown): string[] {
   } catch {
     return [];
   }
+}
+
+function normalizeOptional(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
 }
 
 function buildFtsQuery(query: string): string {
