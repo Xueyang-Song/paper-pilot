@@ -16,6 +16,7 @@ Use this checklist for fundamentals/stabilization passes before adding another m
 - [ ] Run `npm run test:crawlers`.
 - [ ] Confirm no-key API crawlers return papers or graceful warnings without crashing.
 - [ ] Confirm the browser crawler installs/uses Playwright Chromium on demand against the fixture.
+- [ ] Confirm crawl metadata/digest artifacts include per-source diagnostics with source, duration, paper count, and warning/error state.
 
 ## Manual Electron Flow
 
@@ -35,7 +36,10 @@ Use this checklist for fundamentals/stabilization passes before adding another m
 - [ ] For PDF results, confirm the modal scrolls to the matching page.
 - [ ] Confirm PDF search terms are highlighted on the page.
 - [ ] Use previous/next hit buttons and confirm the active highlight changes.
+- [ ] In Settings, switch between Ollama, Vercel AI Gateway, and OpenAI-compatible providers and run the provider health check.
+- [ ] Confirm hosted providers without a stored key show a warning without making a generation request.
 - [ ] Generate a research brief with Ollama selected as the AI provider.
+- [ ] Temporarily break the selected provider and confirm brief generation falls back to local structured synthesis with provider/model/error metadata.
 - [ ] Restart the app.
 - [ ] Confirm projects, artifacts, papers, paper scores, and indexed search still work.
 - [ ] Confirm waiting approval jobs remain pending and can still be approved or denied.
