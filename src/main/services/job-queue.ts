@@ -1,13 +1,24 @@
 import { EventEmitter } from "node:events";
 import type { Job } from "../../shared/schemas.js";
+import { jobSchema } from "../../shared/schemas.js";
+import type { PaperPilotDb } from "../db.js";
 import { id, nowIso } from "../utils.js";
 
 export class JobQueue extends EventEmitter {
   private jobs = new Map<string, Job>();
 
+  constructor(private readonly db?: PaperPilotDb) {
+    super();
+    if (!db) return;
+    db.markInterruptedJobs();
+    for (const job of db.listJobs()) {
+      this.jobs.set(job.id, job);
+    }
+  }
+
   create(input: Pick<Job, "projectId" | "kind" | "title"> & Partial<Pick<Job, "detail" | "status" | "result">>): Job {
     const timestamp = nowIso();
-    const job: Job = {
+    const job = jobSchema.parse({
       id: id("job"),
       projectId: input.projectId,
       kind: input.kind,
@@ -18,8 +29,9 @@ export class JobQueue extends EventEmitter {
       result: input.result,
       createdAt: timestamp,
       updatedAt: timestamp
-    };
+    });
     this.jobs.set(job.id, job);
+    this.db?.saveJob(job);
     this.emit("changed", job);
     return job;
   }
@@ -37,8 +49,9 @@ export class JobQueue extends EventEmitter {
   update(jobId: string, patch: Partial<Omit<Job, "id" | "createdAt">>): Job {
     const current = this.jobs.get(jobId);
     if (!current) throw new Error(`Job not found: ${jobId}`);
-    const next: Job = { ...current, ...patch, updatedAt: nowIso() };
+    const next = jobSchema.parse({ ...current, ...patch, updatedAt: nowIso() });
     this.jobs.set(jobId, next);
+    this.db?.saveJob(next);
     this.emit("changed", next);
     return next;
   }

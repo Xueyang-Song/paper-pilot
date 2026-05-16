@@ -16,6 +16,24 @@ export const sourceIdSchema = z.enum([
 ]);
 export type SourceId = z.infer<typeof sourceIdSchema>;
 
+export const paperScoreSchema = z.object({
+  overall: z.number().min(0).max(100),
+  label: z.enum(["excellent", "strong", "solid", "emerging", "limited"]),
+  components: z.object({
+    citations: z.number().min(0).max(100),
+    venue: z.number().min(0).max(100),
+    institution: z.number().min(0).max(100),
+    recency: z.number().min(0).max(100),
+    access: z.number().min(0).max(100),
+    source: z.number().min(0).max(100),
+    metadata: z.number().min(0).max(100)
+  }),
+  reasons: z.array(z.string()).default([]),
+  scoredAt: z.string(),
+  version: z.string()
+});
+export type PaperScore = z.infer<typeof paperScoreSchema>;
+
 export const paperSchema = z.object({
   id: z.string(),
   projectId: z.string().optional(),
@@ -34,6 +52,7 @@ export const paperSchema = z.object({
   isOpenAccess: z.boolean().default(false),
   license: z.string().optional(),
   fieldsOfStudy: z.array(z.string()).default([]),
+  score: paperScoreSchema.optional(),
   raw: z.record(z.string(), z.unknown()).optional()
 });
 export type Paper = z.infer<typeof paperSchema>;
@@ -63,6 +82,59 @@ export const artifactSchema = z.object({
   createdAt: z.string()
 });
 export type Artifact = z.infer<typeof artifactSchema>;
+
+export const searchScopeSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("global") }),
+  z.object({ type: z.literal("project"), projectId: z.string() }),
+  z.object({ type: z.literal("file"), projectId: z.string(), artifactId: z.string() })
+]);
+export type SearchScope = z.infer<typeof searchScopeSchema>;
+
+export const searchRequestSchema = z.object({
+  query: z.string().min(1),
+  scope: searchScopeSchema,
+  limit: z.number().int().positive().max(100).default(30)
+});
+export type SearchRequest = z.infer<typeof searchRequestSchema>;
+
+export const searchResultSchema = z.object({
+  id: z.string(),
+  kind: z.enum(["paper", "chunk"]),
+  projectId: z.string(),
+  projectTitle: z.string().optional(),
+  artifactId: z.string().optional(),
+  artifactTitle: z.string().optional(),
+  artifactType: artifactTypeSchema.optional(),
+  paperId: z.string().optional(),
+  paperTitle: z.string().optional(),
+  page: z.number().int().positive().optional(),
+  title: z.string(),
+  subtitle: z.string().optional(),
+  snippet: z.string(),
+  score: z.number(),
+  createdAt: z.string().optional()
+});
+export type SearchResult = z.infer<typeof searchResultSchema>;
+
+export const searchResponseSchema = z.object({
+  query: z.string(),
+  scope: searchScopeSchema,
+  results: z.array(searchResultSchema)
+});
+export type SearchResponse = z.infer<typeof searchResponseSchema>;
+
+export const reindexRequestSchema = z.object({
+  projectId: z.string().optional()
+});
+export type ReindexRequest = z.infer<typeof reindexRequestSchema>;
+
+export const reindexResponseSchema = z.object({
+  artifactCount: z.number().int().nonnegative(),
+  paperCount: z.number().int().nonnegative(),
+  chunkCount: z.number().int().nonnegative(),
+  warnings: z.array(z.string()).default([])
+});
+export type ReindexResponse = z.infer<typeof reindexResponseSchema>;
 
 export const projectPolicySchema = z
   .object({
@@ -161,9 +233,9 @@ export type Job = z.infer<typeof jobSchema>;
 
 export const appSettingsSchema = z.object({
   ai: z.object({
-    provider: z.enum(["vercel", "openai-compatible"]).default("vercel"),
-    baseUrl: z.string().url().default("https://ai-gateway.vercel.sh/v1"),
-    model: z.string().default("openai/gpt-5.4"),
+    provider: z.enum(["ollama", "vercel", "openai-compatible"]).default("ollama"),
+    baseUrl: z.string().url().default("http://127.0.0.1:11434"),
+    model: z.string().default("gemma3:12b-it-qat"),
     hasApiKey: z.boolean().default(false),
     reasoningEnabled: z.boolean().default(true)
   }),
