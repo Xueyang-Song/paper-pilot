@@ -1,8 +1,14 @@
 import { copyFile, readFile, writeFile } from "node:fs/promises";
 import { extname, join } from "node:path";
+import { PDFParse } from "pdf-parse";
 import type { Artifact, ArtifactType } from "../../shared/schemas.js";
 import type { PaperPilotDb } from "../db.js";
 import { ensureDir, id, projectDataPath, safeFilename, sha256 } from "../utils.js";
+
+interface IndexChunk {
+  text: string;
+  metadata?: Record<string, unknown>;
+}
 
 const mimeByType: Record<ArtifactType, string> = {
   "metadata-json": "application/json",
@@ -53,13 +59,7 @@ export class ArtifactService {
       createdAt
     };
     this.db.saveArtifact(artifact);
-    if (input.indexText && typeof input.content === "string") {
-      this.db.addDocumentChunks({
-        projectId: input.projectId,
-        artifactId,
-        chunks: chunkText(input.content).map((text, ordinal) => ({ text, metadata: { ordinal } }))
-      });
-    }
+    if (input.indexText !== false) await this.indexArtifactContent(artifact, input.content);
     return artifact;
   }
 
@@ -98,19 +98,41 @@ export class ArtifactService {
       createdAt
     };
     this.db.saveArtifact(artifact);
-    if (input.indexText && input.type !== "paper-pdf") {
-      const text = content.toString("utf8");
-      this.db.addDocumentChunks({
-        projectId: input.projectId,
-        artifactId,
-        chunks: chunkText(text).map((chunk, ordinal) => ({ text: chunk, metadata: { ordinal } }))
-      });
-    }
+    if (input.indexText !== false) await this.indexArtifactContent(artifact, content);
     return artifact;
   }
 
   async readArtifact(artifact: Artifact): Promise<Buffer> {
     return readFile(artifact.path);
+  }
+
+  async indexArtifact(artifact: Artifact, options: { replace?: boolean } = {}): Promise<{ chunkCount: number; warning?: string }> {
+    const content = await readFile(artifact.path);
+    return this.indexArtifactContent(artifact, content, options);
+  }
+
+  private async indexArtifactContent(
+    artifact: Artifact,
+    content: Buffer | string,
+    options: { replace?: boolean } = {}
+  ): Promise<{ chunkCount: number; warning?: string }> {
+    try {
+      const chunks = await buildIndexChunks(artifact, content);
+      if (!chunks.length) return { chunkCount: 0, warning: `${artifact.title}: no indexable text found.` };
+      if (options.replace) this.db.clearDocumentChunksForArtifact(artifact.id);
+      this.db.addDocumentChunks({
+        projectId: artifact.projectId,
+        artifactId: artifact.id,
+        paperId: metadataString(artifact.metadata.paperId),
+        chunks
+      });
+      return { chunkCount: chunks.length };
+    } catch (error) {
+      return {
+        chunkCount: 0,
+        warning: `${artifact.title}: indexing failed: ${error instanceof Error ? error.message : String(error)}`
+      };
+    }
   }
 }
 
@@ -152,4 +174,49 @@ function mimeFromExtension(path: string): string {
     default:
       return "application/octet-stream";
   }
+}
+
+async function buildIndexChunks(artifact: Artifact, content: Buffer | string): Promise<IndexChunk[]> {
+  if (typeof content === "string") return chunksForText(content);
+  if (isTextArtifact(artifact)) return chunksForText(content.toString("utf8"));
+  if (artifact.mime === "application/pdf" || artifact.type === "paper-pdf" || extname(artifact.path).toLowerCase() === ".pdf") {
+    const parser = new PDFParse({ data: content });
+    try {
+      const result = await parser.getText();
+      const chunks: IndexChunk[] = [];
+      for (const page of result.pages) {
+        const pageNumber = Number(page.num);
+        chunksForText(page.text).forEach((chunk, index) => {
+          chunks.push({
+            text: chunk.text,
+            metadata: {
+              ...chunk.metadata,
+              page: Number.isInteger(pageNumber) && pageNumber > 0 ? pageNumber : undefined,
+              pageChunk: index
+            }
+          });
+        });
+      }
+      return chunks;
+    } finally {
+      await parser.destroy();
+    }
+  }
+  return [];
+}
+
+function chunksForText(text: string): IndexChunk[] {
+  return chunkText(text).map((chunk, ordinal) => ({ text: chunk, metadata: { ordinal, source: "artifact-index" } }));
+}
+
+function isTextArtifact(artifact: Artifact): boolean {
+  return (
+    artifact.mime.startsWith("text/") ||
+    artifact.mime === "application/json" ||
+    ["metadata-json", "markdown", "crawl-log", "brief", "script", "table"].includes(artifact.type)
+  );
+}
+
+function metadataString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }

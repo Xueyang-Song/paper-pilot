@@ -14,6 +14,7 @@ import type { BrowserCrawlerService } from "./browser-crawler-service.js";
 import type { CredentialService } from "./credential-service.js";
 import type { FullTextService } from "./full-text-service.js";
 import type { JobQueue } from "./job-queue.js";
+import type { PaperScoringService } from "./paper-scoring-service.js";
 import { requiresApproval } from "./policy.js";
 
 export interface CrawlRunResult {
@@ -31,7 +32,8 @@ export class CrawlService {
     private readonly artifacts: ArtifactService,
     private readonly jobs: JobQueue,
     private readonly browserCrawler?: BrowserCrawlerService,
-    private readonly fullText?: FullTextService
+    private readonly fullText?: FullTextService,
+    private readonly scoring?: PaperScoringService
   ) {}
 
   async runCrawl(
@@ -112,7 +114,19 @@ export class CrawlService {
       }
     }
 
-    const papers = Array.from(saved.values());
+    let papers = Array.from(saved.values());
+    if (this.scoring && papers.length) {
+      this.jobs.update(job.id, {
+        progress: 0.8,
+        detail: `Scoring ${papers.length} retained papers`
+      });
+      const scored = this.scoring.scoreProjectPapers(
+        projectId,
+        papers.map((paper) => paper.id)
+      );
+      const scoredById = new Map(scored.papers.map((paper) => [paper.id, paper]));
+      papers = papers.map((paper) => scoredById.get(paper.id) ?? paper);
+    }
     const fullTextArtifacts: Artifact[] = [];
     if (this.fullText) {
       for (let index = 0; index < papers.length; index += 1) {
@@ -136,8 +150,7 @@ export class CrawlService {
         2
       ),
       source: "crawl-service",
-      metadata: { paperCount: papers.length, sources: sourceIds },
-      indexText: false
+      metadata: { paperCount: papers.length, sources: sourceIds }
     });
     const markdown = renderCrawlMarkdown(config, papers, warnings);
     const markdownArtifact = await this.artifacts.writeArtifact({
@@ -189,6 +202,7 @@ function renderCrawlMarkdown(config: CrawlConfig, papers: Paper[], warnings: str
         paper.authors.length ? `Authors: ${paper.authors.slice(0, 8).join(", ")}` : undefined,
         paper.year ? `Year: ${paper.year}` : undefined,
         paper.venue ? `Venue: ${paper.venue}` : undefined,
+        paper.score ? `Score: ${Math.round(paper.score.overall)} (${paper.score.label})` : undefined,
         paper.doi ? `DOI: ${paper.doi}` : undefined,
         paper.url ? `URL: ${paper.url}` : undefined,
         paper.pdfUrl ? `PDF: ${paper.pdfUrl}` : undefined
