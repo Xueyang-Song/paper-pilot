@@ -136,6 +136,19 @@ export const reindexResponseSchema = z.object({
 });
 export type ReindexResponse = z.infer<typeof reindexResponseSchema>;
 
+export const sourceDiagnosticSchema = z.object({
+  sourceId: sourceIdSchema,
+  displayName: z.string(),
+  status: z.enum(["ok", "warning", "failed"]),
+  durationMs: z.number().int().nonnegative(),
+  paperCount: z.number().int().nonnegative(),
+  warnings: z.array(z.string()).default([]),
+  error: z.string().optional(),
+  attemptedUrl: z.string().optional(),
+  graceful: z.boolean().default(true)
+});
+export type SourceDiagnostic = z.infer<typeof sourceDiagnosticSchema>;
+
 export const projectPolicySchema = z
   .object({
     autonomy: z.enum(["confirm", "project", "yolo"]).default("project"),
@@ -246,6 +259,31 @@ export const appSettingsSchema = z.object({
   })
 });
 export type AppSettings = z.infer<typeof appSettingsSchema>;
+
+export const aiProviderSchema = appSettingsSchema.shape.ai.shape.provider;
+export type AiProvider = z.infer<typeof aiProviderSchema>;
+
+export const aiProviderCheckRequestSchema = z
+  .object({
+    provider: aiProviderSchema.optional(),
+    baseUrl: z.string().url().optional(),
+    model: z.string().optional()
+  })
+  .optional();
+export type AiProviderCheckRequest = z.infer<typeof aiProviderCheckRequestSchema>;
+
+export const aiProviderHealthSchema = z.object({
+  provider: aiProviderSchema,
+  baseUrl: z.string(),
+  model: z.string(),
+  hasApiKey: z.boolean(),
+  reachable: z.boolean(),
+  status: z.enum(["ok", "warning", "error"]),
+  checkedAt: z.string(),
+  detail: z.string().optional(),
+  models: z.array(z.string()).default([])
+});
+export type AiProviderHealth = z.infer<typeof aiProviderHealthSchema>;
 
 export const chatRequestSchema = z.object({
   projectId: z.string().optional(),

@@ -59,6 +59,7 @@ Simultaneously queries **8+ academic databases**:
 ### 🤖 AI-Assisted Synthesis
 - **Local Ollama** for fully offline operation
 - **OpenAI-compatible** API support
+- Vercel AI Gateway support with non-generating provider health checks
 - Tool-calling agent with citation grounding
 - Chat workspace with full conversation history
 

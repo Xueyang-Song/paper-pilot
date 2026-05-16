@@ -1,9 +1,15 @@
-import type { AppSettings, Paper } from "../../shared/schemas.js";
+import {
+  aiProviderHealthSchema,
+  type AiProviderCheckRequest,
+  type AiProviderHealth,
+  type AppSettings,
+  type Paper
+} from "../../shared/schemas.js";
 import type { PaperPilotDb } from "../db.js";
 import type { ArtifactService } from "./artifact-service.js";
 import type { CredentialService } from "./credential-service.js";
 import type { JobQueue } from "./job-queue.js";
-import { DEFAULT_OLLAMA_BASE_URL, DEFAULT_OLLAMA_MODEL, FORCE_OLLAMA_FOR_TESTING } from "./ollama-config.js";
+import { DEFAULT_OLLAMA_BASE_URL, DEFAULT_OLLAMA_MODEL } from "./ollama-config.js";
 import type { SettingsService } from "./settings-service.js";
 
 export class AiService {
@@ -25,18 +31,18 @@ export class AiService {
     let content: string;
     let model = "local-structured";
     let aiWarning: string | undefined;
-    if (FORCE_OLLAMA_FOR_TESTING) {
-      this.jobs.update(job.id, { progress: 0.35, detail: `Calling local Ollama model ${DEFAULT_OLLAMA_MODEL}.` });
+    if (settings.ai.provider === "ollama") {
+      this.jobs.update(job.id, { progress: 0.35, detail: `Calling local Ollama model ${settings.ai.model}.` });
       try {
-        content = await this.callOllama(renderBriefPrompt(project.title, prompt, papers, chunks));
-        model = DEFAULT_OLLAMA_MODEL;
+        content = await this.callOllama(settings, renderBriefPrompt(project.title, prompt, papers, chunks));
+        model = settings.ai.model;
       } catch (error) {
         aiWarning = formatOllamaFallbackWarning(error);
         this.jobs.update(job.id, { progress: 0.55, detail: "Local Ollama model failed; using local structured synthesis." });
         content = [aiWarning, "", localBrief(project.title, prompt, papers, chunks)].join("\n");
       }
     } else if (settings.ai.hasApiKey) {
-      this.jobs.update(job.id, { progress: 0.35, detail: "Calling configured frontier model." });
+      this.jobs.update(job.id, { progress: 0.35, detail: `Calling configured ${providerLabel(settings.ai.provider)} model.` });
       try {
         content = await this.callGateway(settings, renderBriefPrompt(project.title, prompt, papers, chunks));
         model = settings.ai.model;
@@ -55,7 +61,7 @@ export class AiService {
       title: `Research brief - ${project.title}`,
       content,
       source: "ai-service",
-      metadata: { prompt, paperCount: papers.length, model, aiWarning },
+      metadata: { prompt, paperCount: papers.length, provider: settings.ai.provider, model, aiWarning },
       indexText: true
     });
     this.jobs.update(job.id, {
@@ -71,7 +77,7 @@ export class AiService {
     const apiKey = this.credentials.get("ai-gateway");
     if (!apiKey) throw new Error("AI Gateway API key is not configured.");
     const url = new URL("/v1/chat/completions", settings.ai.baseUrl.endsWith("/v1") ? settings.ai.baseUrl.slice(0, -3) : settings.ai.baseUrl);
-    const response = await fetch(url, {
+    const response = await fetch(url.toString(), {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -99,13 +105,13 @@ export class AiService {
     return data.choices?.[0]?.message?.content ?? "No response content returned by the configured model.";
   }
 
-  async callOllama(prompt: string): Promise<string> {
-    const response = await fetch(`${DEFAULT_OLLAMA_BASE_URL}/api/chat`, {
+  async callOllama(settings: AppSettings, prompt: string): Promise<string> {
+    const response = await fetch(`${trimTrailingSlash(settings.ai.baseUrl)}/api/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       signal: AbortSignal.timeout(10 * 60 * 1000),
       body: JSON.stringify({
-        model: DEFAULT_OLLAMA_MODEL,
+        model: settings.ai.model,
         stream: false,
         options: {
           temperature: 0.2,
@@ -128,6 +134,92 @@ export class AiService {
     const data = (await response.json()) as { message?: { content?: string } };
     return data.message?.content ?? "No response content returned by the local Ollama model.";
   }
+
+  async checkProvider(input: AiProviderCheckRequest = {}): Promise<AiProviderHealth> {
+    const current = await this.settings.get();
+    const ai = { ...current.ai, ...(input ?? {}) };
+    const checkedAt = new Date().toISOString();
+    const hasApiKey = this.credentials.has("ai-gateway");
+    try {
+      if (ai.provider === "ollama") {
+        const response = await fetch(`${trimTrailingSlash(ai.baseUrl)}/api/tags`, { signal: AbortSignal.timeout(2500) });
+        if (!response.ok) throw new Error(`Ollama returned ${response.status}.`);
+        const data = (await response.json()) as { models?: Array<{ name?: string }> };
+        const models = (data.models ?? []).map((model) => model.name).filter((name): name is string => Boolean(name));
+        return aiProviderHealthSchema.parse({
+          provider: ai.provider,
+          baseUrl: ai.baseUrl,
+          model: ai.model,
+          hasApiKey,
+          reachable: true,
+          status: models.includes(ai.model) || !models.length ? "ok" : "warning",
+          checkedAt,
+          detail: models.includes(ai.model) || !models.length ? "Ollama is reachable." : `Ollama is reachable, but ${ai.model} is not installed.`,
+          models
+        });
+      }
+
+      if (!hasApiKey) {
+        return aiProviderHealthSchema.parse({
+          provider: ai.provider,
+          baseUrl: ai.baseUrl,
+          model: ai.model,
+          hasApiKey,
+          reachable: false,
+          status: "warning",
+          checkedAt,
+          detail: "No AI API key is stored."
+        });
+      }
+
+      const response = await fetch(new URL("models", ensureTrailingSlash(ai.baseUrl)).toString(), {
+        headers: { Authorization: `Bearer ${this.credentials.get("ai-gateway")}` },
+        signal: AbortSignal.timeout(5000)
+      });
+      if (!response.ok) {
+        const detail = await response.text().catch(() => "");
+        throw new Error(`Model list failed ${response.status}: ${detail.slice(0, 300)}`);
+      }
+      const data = (await response.json()) as { data?: Array<{ id?: string }> };
+      const models = (data.data ?? []).map((model) => model.id).filter((name): name is string => Boolean(name));
+      return aiProviderHealthSchema.parse({
+        provider: ai.provider,
+        baseUrl: ai.baseUrl,
+        model: ai.model,
+        hasApiKey,
+        reachable: true,
+        status: "ok",
+        checkedAt,
+        detail: `${providerLabel(ai.provider)} is reachable.`,
+        models
+      });
+    } catch (error) {
+      return aiProviderHealthSchema.parse({
+        provider: ai.provider,
+        baseUrl: ai.baseUrl,
+        model: ai.model,
+        hasApiKey,
+        reachable: false,
+        status: "error",
+        checkedAt,
+        detail: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
+}
+
+function providerLabel(provider: AppSettings["ai"]["provider"]): string {
+  if (provider === "ollama") return "Ollama";
+  if (provider === "vercel") return "Vercel AI Gateway";
+  return "OpenAI-compatible";
+}
+
+function trimTrailingSlash(value: string): string {
+  return value.replace(/\/+$/, "");
+}
+
+function ensureTrailingSlash(value: string): string {
+  return value.endsWith("/") ? value : `${value}/`;
 }
 
 function formatAiGatewayFallbackWarning(error: unknown): string {
