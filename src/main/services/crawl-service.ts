@@ -4,6 +4,7 @@ import {
   crawlConfigSchema,
   type Paper,
   paperDedupeKey,
+  type SourceDiagnostic,
   type SourceId
 } from "../../shared/schemas.js";
 import type { PaperPilotDb } from "../db.js";
@@ -79,15 +80,18 @@ export class CrawlService {
       : this.jobs.create({ projectId, kind: "crawl", status: "running", title: `Crawling ${config.topic}` });
     const warnings: string[] = [];
     const connectorResults: Array<{ sourceId: SourceId; result?: CrawlResult; error?: string }> = [];
+    const sourceDiagnostics: SourceDiagnostic[] = [];
     const saved = new Map<string, Paper>();
     const sourceIds = config.sourceIds;
     const credentialMap = this.credentials.getMany(sourceIds);
 
     for (let index = 0; index < sourceIds.length; index += 1) {
       const sourceId = sourceIds[index];
+      const definition = this.registry.get(sourceId).definition;
+      const startedAt = Date.now();
       this.jobs.update(job.id, {
         progress: index / Math.max(sourceIds.length, 1),
-        detail: `Running ${this.registry.get(sourceId).definition.displayName}`
+        detail: `Running ${definition.displayName}`
       });
       try {
         const result =
@@ -101,7 +105,18 @@ export class CrawlService {
                 userAgent: "PaperPilot/0.1 research-crawler"
               });
         connectorResults.push({ sourceId, result });
-        warnings.push(...result.warnings.map((warning) => `${this.registry.get(sourceId).definition.displayName}: ${warning}`));
+        const sourceWarnings = result.warnings.map((warning) => `${definition.displayName}: ${warning}`);
+        warnings.push(...sourceWarnings);
+        sourceDiagnostics.push({
+          sourceId,
+          displayName: definition.displayName,
+          status: result.warnings.length ? "warning" : "ok",
+          durationMs: Date.now() - startedAt,
+          paperCount: result.papers.length,
+          warnings: result.warnings,
+          attemptedUrl: diagnosticUrl(result.provenance),
+          graceful: true
+        });
         for (const paper of result.papers) {
           if (config.openAccessOnly && !paper.isOpenAccess && !paper.pdfUrl) continue;
           const savedPaper = this.db.savePaper(projectId, paper);
@@ -110,7 +125,17 @@ export class CrawlService {
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         connectorResults.push({ sourceId, error: message });
-        warnings.push(`${this.registry.get(sourceId).definition.displayName}: ${message}`);
+        warnings.push(`${definition.displayName}: ${message}`);
+        sourceDiagnostics.push({
+          sourceId,
+          displayName: definition.displayName,
+          status: "failed",
+          durationMs: Date.now() - startedAt,
+          paperCount: 0,
+          warnings: [],
+          error: message,
+          graceful: false
+        });
       }
     }
 
@@ -145,21 +170,20 @@ export class CrawlService {
       type: "metadata-json",
       title: `Crawl metadata - ${config.topic}`,
       content: JSON.stringify(
-        { config, papers, warnings, connectorResults, fullTextArtifactIds: fullTextArtifacts.map((artifact) => artifact.id) },
+        { config, papers, warnings, connectorResults, sourceDiagnostics, fullTextArtifactIds: fullTextArtifacts.map((artifact) => artifact.id) },
         null,
         2
       ),
       source: "crawl-service",
-      metadata: { paperCount: papers.length, sources: sourceIds }
+      metadata: { paperCount: papers.length, sources: sourceIds, sourceDiagnostics }
     });
-    const markdown = renderCrawlMarkdown(config, papers, warnings);
     const markdownArtifact = await this.artifacts.writeArtifact({
       projectId,
       type: "markdown",
       title: `Crawl digest - ${config.topic}`,
-      content: markdown,
+      content: renderCrawlMarkdown(config, papers, warnings, sourceDiagnostics),
       source: "crawl-service",
-      metadata: { paperCount: papers.length, sources: sourceIds },
+      metadata: { paperCount: papers.length, sources: sourceIds, sourceDiagnostics },
       indexText: true
     });
     this.jobs.update(job.id, {
@@ -181,7 +205,7 @@ export class CrawlService {
   }
 }
 
-function renderCrawlMarkdown(config: CrawlConfig, papers: Paper[], warnings: string[]): string {
+function renderCrawlMarkdown(config: CrawlConfig, papers: Paper[], warnings: string[], diagnostics: SourceDiagnostic[] = []): string {
   const lines = [
     `# Crawl Digest: ${config.topic}`,
     "",
@@ -192,6 +216,17 @@ function renderCrawlMarkdown(config: CrawlConfig, papers: Paper[], warnings: str
   ];
   if (warnings.length) {
     lines.push("## Warnings", "", ...warnings.map((warning) => `- ${warning}`), "");
+  }
+  if (diagnostics.length) {
+    lines.push("## Source Diagnostics", "", "| Source | Status | Papers | Duration | Notes |", "| --- | --- | ---: | ---: | --- |");
+    for (const diagnostic of diagnostics) {
+      lines.push(
+        `| ${escapeTable(diagnostic.displayName)} | ${diagnostic.status} | ${diagnostic.paperCount} | ${diagnostic.durationMs}ms | ${escapeTable(
+          diagnostic.error ?? diagnostic.warnings.join("; ") ?? ""
+        )} |`
+      );
+    }
+    lines.push("");
   }
   lines.push("## Papers", "");
   for (const paper of papers) {
@@ -215,4 +250,18 @@ function renderCrawlMarkdown(config: CrawlConfig, papers: Paper[], warnings: str
     );
   }
   return lines.join("\n");
+}
+
+function diagnosticUrl(provenance: Record<string, unknown> | undefined): string | undefined {
+  if (!provenance) return undefined;
+  const candidates = ["url", "searchUrl", "summaryUrl", "apiUrl"];
+  for (const key of candidates) {
+    const value = provenance[key];
+    if (typeof value === "string" && value.trim()) return value;
+  }
+  return undefined;
+}
+
+function escapeTable(value: string): string {
+  return value.replace(/\|/g, "\\|").replace(/\n/g, " ");
 }
