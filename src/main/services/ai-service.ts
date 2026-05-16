@@ -3,6 +3,7 @@ import type { PaperPilotDb } from "../db.js";
 import type { ArtifactService } from "./artifact-service.js";
 import type { CredentialService } from "./credential-service.js";
 import type { JobQueue } from "./job-queue.js";
+import { DEFAULT_OLLAMA_BASE_URL, DEFAULT_OLLAMA_MODEL, FORCE_OLLAMA_FOR_TESTING } from "./ollama-config.js";
 import type { SettingsService } from "./settings-service.js";
 
 export class AiService {
@@ -22,9 +23,28 @@ export class AiService {
     const chunks = this.db.hybridSearchChunks(projectId, prompt, 10);
     const settings = await this.settings.get();
     let content: string;
-    if (settings.ai.hasApiKey) {
+    let model = "local-structured";
+    let aiWarning: string | undefined;
+    if (FORCE_OLLAMA_FOR_TESTING) {
+      this.jobs.update(job.id, { progress: 0.35, detail: `Calling local Ollama model ${DEFAULT_OLLAMA_MODEL}.` });
+      try {
+        content = await this.callOllama(renderBriefPrompt(project.title, prompt, papers, chunks));
+        model = DEFAULT_OLLAMA_MODEL;
+      } catch (error) {
+        aiWarning = formatOllamaFallbackWarning(error);
+        this.jobs.update(job.id, { progress: 0.55, detail: "Local Ollama model failed; using local structured synthesis." });
+        content = [aiWarning, "", localBrief(project.title, prompt, papers, chunks)].join("\n");
+      }
+    } else if (settings.ai.hasApiKey) {
       this.jobs.update(job.id, { progress: 0.35, detail: "Calling configured frontier model." });
-      content = await this.callGateway(settings, renderBriefPrompt(project.title, prompt, papers, chunks));
+      try {
+        content = await this.callGateway(settings, renderBriefPrompt(project.title, prompt, papers, chunks));
+        model = settings.ai.model;
+      } catch (error) {
+        aiWarning = formatAiGatewayFallbackWarning(error);
+        this.jobs.update(job.id, { progress: 0.55, detail: "Configured AI model failed; using local structured synthesis." });
+        content = [aiWarning, "", localBrief(project.title, prompt, papers, chunks)].join("\n");
+      }
     } else {
       this.jobs.update(job.id, { progress: 0.35, detail: "No AI key configured; using local structured synthesis." });
       content = localBrief(project.title, prompt, papers, chunks);
@@ -35,7 +55,7 @@ export class AiService {
       title: `Research brief - ${project.title}`,
       content,
       source: "ai-service",
-      metadata: { prompt, paperCount: papers.length, model: settings.ai.hasApiKey ? settings.ai.model : "local-structured" },
+      metadata: { prompt, paperCount: papers.length, model, aiWarning },
       indexText: true
     });
     this.jobs.update(job.id, {
@@ -78,6 +98,55 @@ export class AiService {
     const data = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
     return data.choices?.[0]?.message?.content ?? "No response content returned by the configured model.";
   }
+
+  async callOllama(prompt: string): Promise<string> {
+    const response = await fetch(`${DEFAULT_OLLAMA_BASE_URL}/api/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal: AbortSignal.timeout(10 * 60 * 1000),
+      body: JSON.stringify({
+        model: DEFAULT_OLLAMA_MODEL,
+        stream: false,
+        options: {
+          temperature: 0.2,
+          num_ctx: 8192
+        },
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are Paper Pilot, a careful scientific research agent. Return concise, citation-backed research synthesis in Markdown. Cite papers by bracketed index like [P3]."
+          },
+          { role: "user", content: prompt }
+        ]
+      })
+    });
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "");
+      throw new Error(`Ollama request failed ${response.status}: ${detail.slice(0, 500)}`);
+    }
+    const data = (await response.json()) as { message?: { content?: string } };
+    return data.message?.content ?? "No response content returned by the local Ollama model.";
+  }
+}
+
+function formatAiGatewayFallbackWarning(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  const verificationRequired = /customer_verification_required|credit card on file|403/.test(message);
+  return [
+    "> Note: The configured AI Gateway request failed, so Paper Pilot used local structured synthesis instead.",
+    verificationRequired
+      ? "> Vercel AI Gateway reported that account verification is required before model requests can be served."
+      : `> Gateway error: ${message.slice(0, 300)}`
+  ].join("\n");
+}
+
+function formatOllamaFallbackWarning(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  return [
+    "> Note: The local Ollama model failed, so Paper Pilot used local structured synthesis instead.",
+    `> Ollama error: ${message.slice(0, 300)}`
+  ].join("\n");
 }
 
 function renderBriefPrompt(
