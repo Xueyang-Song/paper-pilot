@@ -29,6 +29,20 @@ export class CredentialService {
     return this.db.listCredentialFlags();
   }
 
+  remove(sourceId: string, label = "default"): boolean {
+    return this.db.deleteCredential(sourceId, label);
+  }
+
+  test(sourceId: string, label = "default"): { sourceId: string; label: string; ok: boolean; detail: string } {
+    const hasSecret = this.has(sourceId, label);
+    return {
+      sourceId,
+      label,
+      ok: hasSecret,
+      detail: hasSecret ? "Credential is stored and readable." : "No credential is stored for this source."
+    };
+  }
+
   private encrypt(value: string): string {
     if (safeStorage.isEncryptionAvailable()) {
       return `safe:${safeStorage.encryptString(value).toString("base64")}`;

@@ -4,6 +4,8 @@ import type { SourceRegistry } from "../sources/registry.js";
 import type { AiService } from "./ai-service.js";
 import type { CrawlService } from "./crawl-service.js";
 import type { JobQueue } from "./job-queue.js";
+import { DEFAULT_OLLAMA_BASE_URL, DEFAULT_OLLAMA_MODEL } from "./ollama-config.js";
+import type { SettingsService } from "./settings-service.js";
 
 interface OllamaToolCall {
   id?: string;
@@ -24,6 +26,12 @@ interface OllamaResponse {
   message?: OllamaMessage;
 }
 
+interface LocalAgentConfig {
+  provider: "ollama";
+  baseUrl: string;
+  model: string;
+}
+
 export class LocalAgentService {
   constructor(
     private readonly db: PaperPilotDb,
@@ -31,27 +39,37 @@ export class LocalAgentService {
     private readonly crawl: CrawlService,
     private readonly ai: AiService,
     private readonly jobs: JobQueue,
-    private readonly options: { model?: string; baseUrl?: string } = {}
+    private readonly options: { model?: string; baseUrl?: string; settings?: SettingsService } = {}
   ) {}
 
   async available(): Promise<boolean> {
+    const config = await this.activeConfig();
+    if (!config) return false;
     try {
-      const response = await fetch(`${this.baseUrl()}/api/tags`, { signal: AbortSignal.timeout(1500) });
+      const response = await fetch(`${baseUrl(config)}/api/tags`, { signal: AbortSignal.timeout(1500) });
       return response.ok;
     } catch {
       return false;
     }
   }
 
-  async run(projectId: string, content: string): Promise<{ content: string; response: ChatResponse }> {
+  async run(projectId: string, content: string): Promise<{ content: string; response: ChatResponse; provider: "ollama"; model: string }> {
+    const config = await this.activeConfig();
+    if (!config) throw new Error("Local Ollama agent is disabled because Ollama is not the selected AI provider.");
+    const project = this.db.getProject(projectId);
+    if (!project) throw new Error(`Project not found: ${projectId}`);
     const messages: OllamaMessage[] = [
       {
         role: "system",
         content: [
           "You are Paper Pilot, a local-first scientific research agent.",
-          "Use tools whenever a user asks to crawl, search the corpus, list project data, or create a research brief.",
+          "The app database is the only source of truth for projects, papers, artifacts, and jobs.",
+          "Never inspect, infer from, or refer to the user's operating-system folders or the current working directory.",
+          "Use tools whenever a user asks to search the corpus, list project data, or create a research brief.",
+          "Crawls are handled by Paper Pilot's crawl service before this chat path, so do not claim a requested crawl is already complete unless project tools show it.",
           "External crawl and script tools may return waiting-approval; never claim they finished unless the tool result says completed.",
-          "Keep final answers concise and cite artifacts or papers when available."
+          "Keep final answers concise and cite artifacts or papers when available.",
+          `Current app project snapshot: ${JSON.stringify(this.projectSnapshot(projectId)).slice(0, 4000)}`
         ].join(" ")
       },
       { role: "user", content }
@@ -59,10 +77,10 @@ export class LocalAgentService {
 
     let finalContent = "";
     for (let turn = 0; turn < 5; turn += 1) {
-      const message = await this.chat(messages);
+      const message = await this.chat(config, messages);
       const toolCalls = message.tool_calls ?? [];
       if (!toolCalls.length) {
-        finalContent = message.content || "I’m ready to continue with the project.";
+        finalContent = message.content || "I'm ready to continue with the project.";
         break;
       }
       messages.push({
@@ -83,10 +101,10 @@ export class LocalAgentService {
     if (!finalContent) {
       finalContent = "I used the available project tools and updated the workspace.";
     }
-    const project = this.db.getProject(projectId);
-    if (!project) throw new Error(`Project not found: ${projectId}`);
     return {
       content: finalContent,
+      provider: config.provider,
+      model: config.model,
       response: {
         project,
         messages: this.db.listMessages(projectId),
@@ -96,12 +114,12 @@ export class LocalAgentService {
     };
   }
 
-  private async chat(messages: OllamaMessage[]): Promise<OllamaMessage> {
-    const response = await fetch(`${this.baseUrl()}/api/chat`, {
+  private async chat(config: LocalAgentConfig, messages: OllamaMessage[]): Promise<OllamaMessage> {
+    const response = await fetch(`${baseUrl(config)}/api/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: this.options.model ?? "qwen2.5:0.5b",
+        model: config.model,
         stream: false,
         messages,
         tools: this.tools()
@@ -208,7 +226,33 @@ export class LocalAgentService {
     ];
   }
 
-  private baseUrl(): string {
-    return (this.options.baseUrl ?? "http://127.0.0.1:11434").replace(/\/$/, "");
+  private async activeConfig(): Promise<LocalAgentConfig | undefined> {
+    if (this.options.settings) {
+      const settings = await this.options.settings.get();
+      if (settings.ai.provider !== "ollama") return undefined;
+      return { provider: "ollama", baseUrl: settings.ai.baseUrl, model: settings.ai.model };
+    }
+    return {
+      provider: "ollama",
+      baseUrl: this.options.baseUrl ?? DEFAULT_OLLAMA_BASE_URL,
+      model: this.options.model ?? DEFAULT_OLLAMA_MODEL
+    };
   }
+
+  private projectSnapshot(projectId: string): unknown {
+    const papers = this.db.listPapers(projectId);
+    const artifacts = this.db.listArtifacts(projectId);
+    return {
+      project: this.db.getProject(projectId),
+      paperCount: papers.length,
+      artifactCount: artifacts.length,
+      recentPaperTitles: papers.slice(0, 8).map((paper) => paper.title),
+      recentArtifacts: artifacts.slice(0, 8).map((artifact) => ({ title: artifact.title, type: artifact.type })),
+      jobs: this.jobs.list(projectId).slice(0, 8).map((job) => ({ title: job.title, status: job.status, detail: job.detail }))
+    };
+  }
+}
+
+function baseUrl(config: LocalAgentConfig): string {
+  return config.baseUrl.replace(/\/+$/, "");
 }

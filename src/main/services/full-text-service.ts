@@ -36,8 +36,7 @@ export class FullTextService {
           doi: paper.doi,
           sourcePaperId: paper.sourcePaperId,
           pdfUrl: paper.pdfUrl
-        },
-        indexText: false
+        }
       });
       return { artifact };
     } catch (error) {

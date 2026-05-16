@@ -16,6 +16,27 @@ export const sourceIdSchema = z.enum([
 ]);
 export type SourceId = z.infer<typeof sourceIdSchema>;
 
+export const paperScoreSchema = z.object({
+  overall: z.number().min(0).max(100),
+  label: z.enum(["excellent", "strong", "solid", "emerging", "limited"]),
+  components: z.object({
+    citations: z.number().min(0).max(100),
+    venue: z.number().min(0).max(100),
+    institution: z.number().min(0).max(100),
+    recency: z.number().min(0).max(100),
+    access: z.number().min(0).max(100),
+    source: z.number().min(0).max(100),
+    metadata: z.number().min(0).max(100)
+  }),
+  reasons: z.array(z.string()).default([]),
+  scoredAt: z.string(),
+  version: z.string()
+});
+export type PaperScore = z.infer<typeof paperScoreSchema>;
+
+export const paperUserStatusSchema = z.enum(["unread", "to-read", "reading", "read", "rejected"]);
+export type PaperUserStatus = z.infer<typeof paperUserStatusSchema>;
+
 export const paperSchema = z.object({
   id: z.string(),
   projectId: z.string().optional(),
@@ -34,6 +55,11 @@ export const paperSchema = z.object({
   isOpenAccess: z.boolean().default(false),
   license: z.string().optional(),
   fieldsOfStudy: z.array(z.string()).default([]),
+  score: paperScoreSchema.optional(),
+  favorite: z.boolean().optional(),
+  userStatus: paperUserStatusSchema.optional(),
+  tags: z.array(z.string()).optional(),
+  notes: z.string().optional(),
   raw: z.record(z.string(), z.unknown()).optional()
 });
 export type Paper = z.infer<typeof paperSchema>;
@@ -64,6 +90,72 @@ export const artifactSchema = z.object({
 });
 export type Artifact = z.infer<typeof artifactSchema>;
 
+export const searchScopeSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("global") }),
+  z.object({ type: z.literal("project"), projectId: z.string() }),
+  z.object({ type: z.literal("file"), projectId: z.string(), artifactId: z.string() })
+]);
+export type SearchScope = z.infer<typeof searchScopeSchema>;
+
+export const searchRequestSchema = z.object({
+  query: z.string().min(1),
+  scope: searchScopeSchema,
+  limit: z.number().int().positive().max(100).default(30)
+});
+export type SearchRequest = z.infer<typeof searchRequestSchema>;
+
+export const searchResultSchema = z.object({
+  id: z.string(),
+  kind: z.enum(["paper", "chunk"]),
+  projectId: z.string(),
+  projectTitle: z.string().optional(),
+  artifactId: z.string().optional(),
+  artifactTitle: z.string().optional(),
+  artifactType: artifactTypeSchema.optional(),
+  paperId: z.string().optional(),
+  paperTitle: z.string().optional(),
+  page: z.number().int().positive().optional(),
+  title: z.string(),
+  subtitle: z.string().optional(),
+  snippet: z.string(),
+  score: z.number(),
+  createdAt: z.string().optional()
+});
+export type SearchResult = z.infer<typeof searchResultSchema>;
+
+export const searchResponseSchema = z.object({
+  query: z.string(),
+  scope: searchScopeSchema,
+  results: z.array(searchResultSchema)
+});
+export type SearchResponse = z.infer<typeof searchResponseSchema>;
+
+export const reindexRequestSchema = z.object({
+  projectId: z.string().optional()
+});
+export type ReindexRequest = z.infer<typeof reindexRequestSchema>;
+
+export const reindexResponseSchema = z.object({
+  artifactCount: z.number().int().nonnegative(),
+  paperCount: z.number().int().nonnegative(),
+  chunkCount: z.number().int().nonnegative(),
+  warnings: z.array(z.string()).default([])
+});
+export type ReindexResponse = z.infer<typeof reindexResponseSchema>;
+
+export const sourceDiagnosticSchema = z.object({
+  sourceId: sourceIdSchema,
+  displayName: z.string(),
+  status: z.enum(["ok", "warning", "failed"]),
+  durationMs: z.number().int().nonnegative(),
+  paperCount: z.number().int().nonnegative(),
+  warnings: z.array(z.string()).default([]),
+  error: z.string().optional(),
+  attemptedUrl: z.string().optional(),
+  graceful: z.boolean().default(true)
+});
+export type SourceDiagnostic = z.infer<typeof sourceDiagnosticSchema>;
+
 export const projectPolicySchema = z
   .object({
     autonomy: z.enum(["confirm", "project", "yolo"]).default("project"),
@@ -87,6 +179,9 @@ export const projectSchema = z.object({
   id: z.string(),
   title: z.string(),
   topic: z.string().optional(),
+  description: z.string().optional(),
+  archivedAt: z.string().optional(),
+  pinnedAt: z.string().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
   policy: projectPolicySchema
@@ -161,9 +256,9 @@ export type Job = z.infer<typeof jobSchema>;
 
 export const appSettingsSchema = z.object({
   ai: z.object({
-    provider: z.enum(["vercel", "openai-compatible"]).default("vercel"),
-    baseUrl: z.string().url().default("https://ai-gateway.vercel.sh/v1"),
-    model: z.string().default("openai/gpt-5.4"),
+    provider: z.enum(["ollama", "vercel", "openai-compatible"]).default("ollama"),
+    baseUrl: z.string().url().default("http://127.0.0.1:11434"),
+    model: z.string().default("gemma3:12b-it-qat"),
     hasApiKey: z.boolean().default(false),
     reasoningEnabled: z.boolean().default(true)
   }),
@@ -171,9 +266,39 @@ export const appSettingsSchema = z.object({
     runtimeMode: z.enum(["managed", "system", "bundled"]).default("managed"),
     executablePath: z.string().optional(),
     markitdownEnabled: z.boolean().default(true)
-  })
+  }),
+  sources: z
+    .object({
+      disabledSourceIds: z.array(sourceIdSchema).default([])
+    })
+    .default({ disabledSourceIds: [] })
 });
 export type AppSettings = z.infer<typeof appSettingsSchema>;
+
+export const aiProviderSchema = appSettingsSchema.shape.ai.shape.provider;
+export type AiProvider = z.infer<typeof aiProviderSchema>;
+
+export const aiProviderCheckRequestSchema = z
+  .object({
+    provider: aiProviderSchema.optional(),
+    baseUrl: z.string().url().optional(),
+    model: z.string().optional()
+  })
+  .optional();
+export type AiProviderCheckRequest = z.infer<typeof aiProviderCheckRequestSchema>;
+
+export const aiProviderHealthSchema = z.object({
+  provider: aiProviderSchema,
+  baseUrl: z.string(),
+  model: z.string(),
+  hasApiKey: z.boolean(),
+  reachable: z.boolean(),
+  status: z.enum(["ok", "warning", "error"]),
+  checkedAt: z.string(),
+  detail: z.string().optional(),
+  models: z.array(z.string()).default([])
+});
+export type AiProviderHealth = z.infer<typeof aiProviderHealthSchema>;
 
 export const chatRequestSchema = z.object({
   projectId: z.string().optional(),
@@ -196,6 +321,46 @@ export const credentialUpsertSchema = z.object({
   secret: z.string().min(1)
 });
 export type CredentialUpsert = z.infer<typeof credentialUpsertSchema>;
+
+export const projectUpdateSchema = z.object({
+  projectId: z.string(),
+  title: z.string().trim().min(1).max(120).optional(),
+  topic: z.string().trim().max(240).optional().or(z.literal("")),
+  description: z.string().trim().max(2000).optional().or(z.literal(""))
+});
+export type ProjectUpdate = z.infer<typeof projectUpdateSchema>;
+
+export const artifactUpdateSchema = z.object({
+  projectId: z.string(),
+  artifactId: z.string(),
+  title: z.string().trim().min(1).max(180).optional()
+});
+export type ArtifactUpdate = z.infer<typeof artifactUpdateSchema>;
+
+export const paperUpdateSchema = z.object({
+  projectId: z.string(),
+  paperId: z.string(),
+  patch: z.object({
+    title: z.string().trim().min(1).max(500).optional(),
+    abstract: z.string().optional(),
+    authors: z.array(z.string()).optional(),
+    year: z.number().int().min(1500).max(3000).optional(),
+    publishedAt: z.string().optional(),
+    doi: z.string().optional(),
+    url: z.string().url().optional(),
+    pdfUrl: z.string().url().optional(),
+    venue: z.string().optional(),
+    citationCount: z.number().int().nonnegative().optional(),
+    isOpenAccess: z.boolean().optional(),
+    license: z.string().optional(),
+    fieldsOfStudy: z.array(z.string()).optional(),
+    favorite: z.boolean().optional(),
+    userStatus: paperUserStatusSchema.optional(),
+    tags: z.array(z.string()).optional(),
+    notes: z.string().optional()
+  })
+});
+export type PaperUpdate = z.infer<typeof paperUpdateSchema>;
 
 export function normalizeTitle(title: string): string {
   return title

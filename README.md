@@ -59,6 +59,7 @@ Simultaneously queries **8+ academic databases**:
 ### 🤖 AI-Assisted Synthesis
 - **Local Ollama** for fully offline operation
 - **OpenAI-compatible** API support
+- Vercel AI Gateway support with non-generating provider health checks
 - Tool-calling agent with citation grounding
 - Chat workspace with full conversation history
 
@@ -185,8 +186,11 @@ This is an **early v1** — buildable, test-covered, but still hardening for pro
 Contributions welcome. Please open an issue before large PRs to discuss approach.
 
 ```bash
-npm run test       # Run test suite (Vitest)
-npm run typecheck  # TypeScript strict checks
+npm run verify                 # Typecheck, tests, and production build
+npm run test                   # Run test suite (Vitest)
+npm run typecheck              # TypeScript strict checks
+npm run test:crawlers:api      # Live no-key HTTP source smoke
+npm run test:crawlers:browser  # Playwright browser crawler smoke
 ```
 
 ---

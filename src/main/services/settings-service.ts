@@ -3,18 +3,22 @@ import { dirname } from "node:path";
 import { type AppSettings, appSettingsSchema } from "../../shared/schemas.js";
 import { ensureDir } from "../utils.js";
 import type { CredentialService } from "./credential-service.js";
+import { DEFAULT_OLLAMA_BASE_URL, DEFAULT_OLLAMA_MODEL } from "./ollama-config.js";
 
 const defaults: AppSettings = appSettingsSchema.parse({
   ai: {
-    provider: "vercel",
-    baseUrl: "https://ai-gateway.vercel.sh/v1",
-    model: "openai/gpt-5.4",
+    provider: "ollama",
+    baseUrl: DEFAULT_OLLAMA_BASE_URL,
+    model: DEFAULT_OLLAMA_MODEL,
     hasApiKey: false,
     reasoningEnabled: true
   },
   python: {
     runtimeMode: "managed",
     markitdownEnabled: true
+  },
+  sources: {
+    disabledSourceIds: []
   }
 });
 
@@ -39,7 +43,8 @@ export class SettingsService {
     const current = await this.get();
     const next = appSettingsSchema.parse({
       ai: { ...current.ai, ...patch.ai, hasApiKey: this.credentials.has("ai-gateway") },
-      python: { ...current.python, ...patch.python }
+      python: { ...current.python, ...patch.python },
+      sources: { ...current.sources, ...patch.sources }
     });
     await ensureDir(dirname(this.settingsPath));
     await writeFile(this.settingsPath, JSON.stringify(next, null, 2), "utf8");

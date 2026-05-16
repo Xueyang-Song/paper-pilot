@@ -14,7 +14,9 @@ import { CrawlService } from "./services/crawl-service.js";
 import { FullTextService } from "./services/full-text-service.js";
 import { JobQueue } from "./services/job-queue.js";
 import { LocalAgentService } from "./services/local-agent-service.js";
+import { PaperScoringService } from "./services/paper-scoring-service.js";
 import { PythonService } from "./services/python-service.js";
+import { SearchService } from "./services/search-service.js";
 import { SettingsService } from "./services/settings-service.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -59,19 +61,21 @@ app.whenReady().then(() => {
   const dataRoot = app.getPath("userData");
   const db = new PaperPilotDb(join(dataRoot, "paper-pilot.db"));
   const registry = new SourceRegistry();
-  const jobs = new JobQueue();
+  const jobs = new JobQueue(db);
   const artifacts = new ArtifactService(db, dataRoot);
   const credentials = new CredentialService(db);
   const settings = new SettingsService(join(dataRoot, "settings", "app-settings.json"), credentials);
   const python = new PythonService(db, dataRoot, settings, artifacts, jobs);
   const browserCrawler = new BrowserCrawlerService(python);
   const fullText = new FullTextService(artifacts);
-  const crawl = new CrawlService(db, registry, credentials, artifacts, jobs, browserCrawler, fullText);
+  const scoring = new PaperScoringService(db);
+  const search = new SearchService(db, artifacts);
+  const crawl = new CrawlService(db, registry, credentials, artifacts, jobs, browserCrawler, fullText, scoring, settings);
   const ai = new AiService(db, settings, credentials, artifacts, jobs);
-  const localAgent = new LocalAgentService(db, registry, crawl, ai, jobs);
+  const localAgent = new LocalAgentService(db, registry, crawl, ai, jobs, { settings });
   const agent = new AgentService(db, crawl, ai, artifacts, jobs, localAgent);
 
-  registerIpc({ db, registry, agent, crawl, ai, credentials, settings, python, jobs });
+  registerIpc({ db, registry, agent, crawl, ai, artifacts, credentials, settings, python, jobs, scoring, search, dataRoot });
   mainWindow = createWindow();
 
   app.on("activate", () => {
