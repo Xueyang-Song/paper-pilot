@@ -67,60 +67,60 @@ export function ProjectRail(props: {
       </div>
       <ScrollArea className="min-h-0 flex-1">
         <div className="p-3">
-          <div className="mb-3 flex items-center gap-2 rounded-lg border border-sidebar-border bg-background/50 px-2">
-          <Search size={14} className="shrink-0 text-muted-foreground" />
-          <Input
-            value={filter}
-            onChange={(event) => setFilter(event.target.value)}
-            placeholder="Search projects"
-            className="h-9 min-w-0 flex-1 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
-          />
-        </div>
-        <div className="mb-2 px-2 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Projects</div>
-        <div className="space-y-1">
-          {activeProjects.map((project) => (
-            <ProjectRailItem
-              key={project.id}
-              project={project}
-              selected={project.id === props.activeProjectId}
-              onSelect={props.onSelect}
-              onRename={props.onRename}
-              onUpdate={props.onUpdate}
-              onPin={props.onPin}
-              onArchive={props.onArchive}
-              onDelete={props.onDelete}
-              onDuplicate={props.onDuplicate}
-              onExport={props.onExport}
+          <div className="mb-3 flex items-center gap-2 rounded-lg border border-sidebar-border bg-input/30 px-2 transition-colors focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50">
+            <Search size={14} className="shrink-0 text-muted-foreground" />
+            <Input
+              value={filter}
+              onChange={(event) => setFilter(event.target.value)}
+              placeholder="Search projects"
+              className="h-9 min-w-0 flex-1 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
             />
-          ))}
-          {!filteredProjects.length ? (
-            <Alert className="border-dashed">
-              <AlertDescription>{props.projects.length ? "No projects match that search." : "Create a project from chat or the title bar."}</AlertDescription>
-            </Alert>
-          ) : null}
-        </div>
-        {archivedProjects.length ? (
-          <div className="mt-5">
-            <div className="mb-2 px-2 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Archived</div>
-            <div className="space-y-1">
-              {archivedProjects.map((project) => (
-                <ProjectRailItem
-                  key={project.id}
-                  project={project}
-                  selected={project.id === props.activeProjectId}
-                  onSelect={props.onSelect}
-                  onRename={props.onRename}
-                  onUpdate={props.onUpdate}
-                  onPin={props.onPin}
-                  onArchive={props.onArchive}
-                  onDelete={props.onDelete}
-                  onDuplicate={props.onDuplicate}
-                  onExport={props.onExport}
-                />
-              ))}
-            </div>
           </div>
-        ) : null}
+          <div className="mb-2 px-2 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Projects</div>
+          <div className="space-y-1">
+            {activeProjects.map((project) => (
+              <ProjectRailItem
+                key={project.id}
+                project={project}
+                selected={project.id === props.activeProjectId}
+                onSelect={props.onSelect}
+                onRename={props.onRename}
+                onUpdate={props.onUpdate}
+                onPin={props.onPin}
+                onArchive={props.onArchive}
+                onDelete={props.onDelete}
+                onDuplicate={props.onDuplicate}
+                onExport={props.onExport}
+              />
+            ))}
+            {!filteredProjects.length ? (
+              <Alert className="border-dashed">
+                <AlertDescription>{props.projects.length ? "No projects match that search." : "Create a project from chat or the title bar."}</AlertDescription>
+              </Alert>
+            ) : null}
+          </div>
+          {archivedProjects.length ? (
+            <div className="mt-5">
+              <div className="mb-2 px-2 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Archived</div>
+              <div className="space-y-1">
+                {archivedProjects.map((project) => (
+                  <ProjectRailItem
+                    key={project.id}
+                    project={project}
+                    selected={project.id === props.activeProjectId}
+                    onSelect={props.onSelect}
+                    onRename={props.onRename}
+                    onUpdate={props.onUpdate}
+                    onPin={props.onPin}
+                    onArchive={props.onArchive}
+                    onDelete={props.onDelete}
+                    onDuplicate={props.onDuplicate}
+                    onExport={props.onExport}
+                  />
+                ))}
+              </div>
+            </div>
+          ) : null}
         </div>
       </ScrollArea>
     </aside>
