@@ -73,7 +73,7 @@ export function ProjectRail(props: {
               value={filter}
               onChange={(event) => setFilter(event.target.value)}
               placeholder="Search projects"
-              className="h-9 min-w-0 flex-1 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
+              className="h-9 min-w-0 flex-1 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0 dark:bg-transparent"
             />
           </div>
           <div className="mb-2 px-2 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Projects</div>
