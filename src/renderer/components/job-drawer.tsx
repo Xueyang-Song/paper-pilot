@@ -4,6 +4,10 @@ import { Gauge, History, Loader2, Play, RotateCcw, Trash2, XCircle } from "lucid
 import type { JSX } from "react";
 import { useState } from "react";
 import type { Job } from "../../shared/schemas";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
 
 export function JobDrawer({ projectId, initialJobs }: { projectId?: string; initialJobs: Job[] }): JSX.Element {
   const queryClient = useQueryClient();
@@ -52,25 +56,27 @@ export function JobDrawer({ projectId, initialJobs }: { projectId?: string; init
     <div className="absolute bottom-4 right-[360px] z-20 w-80 space-y-2">
       <div className="flex justify-end gap-2">
         {jobs.length ? (
-          <button
+          <Button
             type="button"
+            variant="outline"
+            size="sm"
             onClick={() => setShowHistory((current) => !current)}
-            className="inline-flex h-8 items-center gap-2 rounded-md border border-stone-300 bg-white px-3 text-xs font-medium text-stone-700 shadow-sm transition hover:border-[#175c62] hover:text-[#175c62]"
           >
             <History size={13} />
             {showHistory ? "Active" : "History"}
-          </button>
+          </Button>
         ) : null}
         {showHistory ? (
-          <button
+          <Button
             type="button"
+            variant="outline"
+            size="sm"
             onClick={() => clearTerminalJobs.mutate()}
             disabled={clearTerminalJobs.isPending}
-            className="inline-flex h-8 items-center gap-2 rounded-md border border-stone-300 bg-white px-3 text-xs font-medium text-stone-700 shadow-sm transition hover:border-[#175c62] hover:text-[#175c62] disabled:opacity-50"
           >
             <Trash2 size={13} />
             Clear done
-          </button>
+          </Button>
         ) : null}
       </div>
       {visibleJobs.map((job) => (
@@ -78,67 +84,62 @@ export function JobDrawer({ projectId, initialJobs }: { projectId?: string; init
           key={job.id}
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          className="rounded-md border border-stone-300 bg-white p-3 shadow-lg"
+          transition={{ type: "tween", duration: 0.16 }}
         >
-          <div className="mb-2 flex items-center justify-between">
-            <div className="flex min-w-0 items-center gap-2 text-sm font-medium">
-              {job.status === "running" ? <Loader2 size={15} className="animate-spin text-[#175c62]" /> : <Gauge size={15} />}
-              <span className="truncate">{job.title}</span>
+          <Card className="rounded-lg border-border bg-card p-3 py-3 shadow-lg">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-2 text-sm font-medium">
+                {job.status === "running" ? <Loader2 size={15} className="animate-spin text-primary" /> : <Gauge size={15} />}
+                <span className="truncate">{job.title}</span>
+              </div>
+              <Badge variant="outline" className="shrink-0">
+                {job.status}
+              </Badge>
             </div>
-            <span className="text-xs text-stone-500">{job.status}</span>
-          </div>
-          <div className="h-1.5 overflow-hidden rounded-full bg-stone-200">
-            <div className="h-full bg-[#175c62]" style={{ width: `${Math.max(6, job.progress * 100)}%` }} />
-          </div>
-          {job.detail ? <div className="mt-2 text-xs text-stone-600">{job.detail}</div> : null}
-          {job.status === "waiting-approval" ? (
-            <div className="mt-3 flex gap-2">
-              <button
-                type="button"
-                onClick={() => approveJob.mutate(job.id)}
-                disabled={approveJob.isPending || denyJob.isPending}
-                className="inline-flex h-8 flex-1 items-center justify-center gap-2 rounded-md bg-[#175c62] px-3 text-xs font-medium text-white transition hover:bg-[#11494e] disabled:opacity-50"
-              >
-                <Play size={13} />
-                Approve
-              </button>
-              <button
-                type="button"
-                onClick={() => denyJob.mutate(job.id)}
-                disabled={approveJob.isPending || denyJob.isPending}
-                className="inline-flex h-8 flex-1 items-center justify-center rounded-md border border-stone-300 px-3 text-xs font-medium text-stone-700 transition hover:bg-stone-100 disabled:opacity-50"
-              >
-                Deny
-              </button>
-            </div>
-          ) : null}
-          {job.status === "running" || job.status === "queued" ? (
-            <div className="mt-3">
-              <button
-                type="button"
-                onClick={() => cancelJob.mutate(job.id)}
-                disabled={cancelJob.isPending}
-                className="inline-flex h-8 w-full items-center justify-center gap-2 rounded-md border border-[#e9b4c1] px-3 text-xs font-medium text-[#7b2d43] transition hover:border-[#7b2d43] disabled:opacity-50"
-              >
-                <XCircle size={13} />
-                Cancel
-              </button>
-            </div>
-          ) : null}
-          {job.status === "failed" || job.status === "cancelled" ? (
-            <div className="mt-3">
-              <button
-                type="button"
-                onClick={() => retryJob.mutate(job.id)}
-                disabled={retryJob.isPending}
-                className="inline-flex h-8 w-full items-center justify-center gap-2 rounded-md border border-stone-300 px-3 text-xs font-medium text-stone-700 transition hover:bg-stone-100 disabled:opacity-50"
-              >
-                <RotateCcw size={13} />
-                Retry
-              </button>
-            </div>
-          ) : null}
-          {job.error ? <div className="mt-2 line-clamp-3 text-xs text-[#7b2d43]">{job.error}</div> : null}
+            <Progress value={Math.max(6, job.progress * 100)} />
+            {job.detail ? <div className="mt-2 text-xs text-muted-foreground">{job.detail}</div> : null}
+            {job.status === "waiting-approval" ? (
+              <div className="mt-3 flex gap-2">
+                <Button
+                  type="button"
+                  onClick={() => approveJob.mutate(job.id)}
+                  disabled={approveJob.isPending || denyJob.isPending}
+                  className="flex-1"
+                  size="sm"
+                >
+                  <Play size={13} />
+                  Approve
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => denyJob.mutate(job.id)}
+                  disabled={approveJob.isPending || denyJob.isPending}
+                  className="flex-1"
+                  size="sm"
+                >
+                  Deny
+                </Button>
+              </div>
+            ) : null}
+            {job.status === "running" || job.status === "queued" ? (
+              <div className="mt-3">
+                <Button type="button" variant="destructive" onClick={() => cancelJob.mutate(job.id)} disabled={cancelJob.isPending} className="w-full" size="sm">
+                  <XCircle size={13} />
+                  Cancel
+                </Button>
+              </div>
+            ) : null}
+            {job.status === "failed" || job.status === "cancelled" ? (
+              <div className="mt-3">
+                <Button type="button" variant="outline" onClick={() => retryJob.mutate(job.id)} disabled={retryJob.isPending} className="w-full" size="sm">
+                  <RotateCcw size={13} />
+                  Retry
+                </Button>
+              </div>
+            ) : null}
+            {job.error ? <div className="mt-2 line-clamp-3 text-xs text-destructive">{job.error}</div> : null}
+          </Card>
         </motion.div>
       ))}
     </div>

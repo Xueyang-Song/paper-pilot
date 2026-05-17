@@ -40,7 +40,20 @@ export interface ArtifactContent {
   truncated: boolean;
 }
 
+export interface WindowState {
+  isMaximized: boolean;
+  isFocused: boolean;
+  isFullScreen?: boolean;
+}
+
 export interface PaperPilotApi {
+  platform(): Promise<"darwin" | "win32" | "linux" | string>;
+  minimizeWindow(): Promise<void>;
+  toggleMaximizeWindow(): Promise<{ isMaximized: boolean }>;
+  closeWindow(): Promise<void>;
+  getWindowState(): Promise<WindowState>;
+  setTitleBarTheme(theme: "light" | "dark"): Promise<void>;
+  onWindowStateChanged(listener: (state: WindowState) => void): () => void;
   listProjects(): Promise<Project[]>;
   getProjectBundle(projectId: string): Promise<ProjectBundle>;
   createProject(input: { title: string; topic?: string }): Promise<Project>;
@@ -99,6 +112,17 @@ export interface PaperPilotApi {
 }
 
 const api: PaperPilotApi = {
+  platform: () => ipcRenderer.invoke("window:platform"),
+  minimizeWindow: () => ipcRenderer.invoke("window:minimize"),
+  toggleMaximizeWindow: () => ipcRenderer.invoke("window:toggleMaximize"),
+  closeWindow: () => ipcRenderer.invoke("window:close"),
+  getWindowState: () => ipcRenderer.invoke("window:getState"),
+  setTitleBarTheme: (theme) => ipcRenderer.invoke("window:setTitleBarTheme", theme),
+  onWindowStateChanged: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, state: WindowState) => listener(state);
+    ipcRenderer.on("window:state-changed", handler);
+    return () => ipcRenderer.off("window:state-changed", handler);
+  },
   listProjects: () => ipcRenderer.invoke("projects:list"),
   getProjectBundle: (projectId) => ipcRenderer.invoke("projects:getBundle", projectId),
   createProject: (input) => ipcRenderer.invoke("projects:create", input),

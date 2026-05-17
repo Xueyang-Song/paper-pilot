@@ -1,26 +1,45 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { motion } from "framer-motion";
-import { Brain, CheckCircle2, Database, KeyRound, Loader2, RefreshCw, Search, ShieldCheck, Trash2, X } from "lucide-react";
+import { Brain, CheckCircle2, Database, KeyRound, Loader2, Monitor, Moon, RefreshCw, Search, ShieldCheck, Sun, Trash2 } from "lucide-react";
 import type { JSX } from "react";
 import { useEffect, useMemo, useState } from "react";
 import type { AiProviderHealth, AppSettings, Project, SourceDefinition, SourceId } from "../../shared/schemas";
-import { IconButton, PanelSection, PolicyToggle } from "./ui";
+import { PanelSection, PolicyToggle } from "./ui";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { cn } from "@/lib/utils";
 
 const providerDefaults: Record<AppSettings["ai"]["provider"], { baseUrl: string; model: string }> = {
   ollama: { baseUrl: "http://127.0.0.1:11434", model: "gemma3:12b-it-qat" },
   vercel: { baseUrl: "https://ai-gateway.vercel.sh/v1", model: "openai/gpt-5.4" },
   "openai-compatible": { baseUrl: "http://127.0.0.1:1234/v1", model: "local-model" }
 };
+type ThemePreference = AppSettings["ui"]["theme"];
 
 export function SettingsPanel({
+  open,
   sources,
   activeProject,
   aiHealth,
+  themePreference,
+  isThemeSaving,
+  onThemeChange,
   onClose
 }: {
+  open: boolean;
   sources: SourceDefinition[];
   activeProject?: Project;
   aiHealth?: AiProviderHealth;
+  themePreference: ThemePreference;
+  isThemeSaving: boolean;
+  onThemeChange(theme: ThemePreference): void;
   onClose(): void;
 }): JSX.Element {
   const queryClient = useQueryClient();
@@ -127,251 +146,246 @@ export function SettingsPanel({
   }
 
   return (
-    <div className="fixed inset-0 z-40 bg-stone-950/20">
-      <motion.aside
-        initial={{ x: 420 }}
-        animate={{ x: 0 }}
-        className="absolute right-0 top-0 flex h-full w-[420px] flex-col border-l border-stone-300 bg-[#fbfaf6] shadow-2xl"
-      >
-        <div className="flex h-16 items-center justify-between border-b border-stone-200 px-5">
-          <div>
-            <div className="text-sm font-semibold">Settings</div>
-            <div className="text-xs text-stone-600">Sources, AI, policy</div>
-          </div>
-          <IconButton label="Close settings" onClick={onClose}>
-            <X size={18} />
-          </IconButton>
-        </div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-5">
-          <PanelSection icon={<Brain size={17} />} title="AI Provider">
-            <label className="field-label">Provider</label>
-            <select
-              value={provider}
-              onChange={(event) => changeProvider(event.target.value as AppSettings["ai"]["provider"])}
-              className="field-input"
-            >
-              <option value="ollama">Ollama</option>
-              <option value="vercel">Vercel AI Gateway</option>
-              <option value="openai-compatible">OpenAI-compatible</option>
-            </select>
-            <label className="field-label">Base URL</label>
-            <input value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} className="field-input" />
-            <label className="field-label">Model</label>
-            <input value={model} onChange={(event) => setModel(event.target.value)} className="field-input" />
-            {displayedHealth?.models.length ? (
-              <select value={model} onChange={(event) => setModel(event.target.value)} className="field-input">
-                {displayedHealth.models.map((modelName) => (
-                  <option key={modelName} value={modelName}>
-                    {modelName}
-                  </option>
-                ))}
-              </select>
-            ) : null}
-            <div className="grid grid-cols-2 gap-2">
-              <button type="button" onClick={() => saveSettings.mutate()} className="primary-button">
-                Save AI settings
-              </button>
-              <button
-                type="button"
-                onClick={() => checkProvider.mutate()}
-                disabled={checkProvider.isPending}
-                className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-stone-300 bg-white px-3 text-sm font-medium text-stone-700 transition hover:border-[#175c62] hover:text-[#175c62] disabled:opacity-50"
+    <Sheet open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
+      <SheetContent side="right" className="gap-0 border-border bg-popover p-0 sm:max-w-[440px]" showCloseButton>
+        <SheetHeader className="border-b border-border px-5 py-4 pr-14">
+          <SheetTitle>Settings</SheetTitle>
+          <SheetDescription>Sources, AI, policy, and appearance.</SheetDescription>
+        </SheetHeader>
+        <ScrollArea className="min-h-0 flex-1">
+          <div className="p-5">
+            <PanelSection icon={<Moon size={17} />} title="Appearance">
+              <ToggleGroup
+                type="single"
+                value={themePreference}
+                onValueChange={(value) => value && onThemeChange(value as ThemePreference)}
+                variant="outline"
+                className="grid w-full grid-cols-3"
               >
-                {checkProvider.isPending ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
-                Check
-              </button>
-            </div>
-            {displayedHealth ? (
-              <div
-                className={`rounded-md border px-3 py-2 text-xs leading-5 ${
-                  displayedHealth.status === "ok"
-                    ? "border-[#8aa66a] bg-[#edf4dc] text-[#476629]"
-                    : displayedHealth.status === "warning"
-                      ? "border-[#d2b05f] bg-[#fbf0c9] text-[#77581b]"
-                      : "border-[#e9b4c1] bg-white text-[#7b2d43]"
-                }`}
-              >
-                <div className="font-medium">
-                  {displayedHealth.reachable ? "Reachable" : "Not reachable"} | {displayedHealth.hasApiKey ? "Key stored" : "No key stored"}
-                </div>
-                {displayedHealth.detail ? <div>{displayedHealth.detail}</div> : null}
-              </div>
-            ) : null}
-          </PanelSection>
-
-          <PanelSection icon={<Search size={17} />} title="Search Index">
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => reindexSearch.mutate(activeProject?.id)}
-                disabled={!activeProject || reindexSearch.isPending}
-                className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-stone-300 bg-white px-3 text-sm font-medium text-stone-700 transition hover:border-[#175c62] hover:text-[#175c62] disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {reindexSearch.isPending ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-                Project
-              </button>
-              <button
-                type="button"
-                onClick={() => reindexSearch.mutate(undefined)}
-                disabled={reindexSearch.isPending}
-                className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-stone-300 bg-white px-3 text-sm font-medium text-stone-700 transition hover:border-[#175c62] hover:text-[#175c62] disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {reindexSearch.isPending ? <Loader2 size={14} className="animate-spin" /> : <Database size={14} />}
-                All
-              </button>
-            </div>
-            {reindexSearch.data ? (
-              <div className="rounded-md border border-stone-200 bg-white px-3 py-2 text-xs leading-5 text-stone-600">
-                Indexed {reindexSearch.data.chunkCount} chunks from {reindexSearch.data.artifactCount} files and{" "}
-                {reindexSearch.data.paperCount} papers.
-                {reindexSearch.data.warnings.length ? (
-                  <div className="mt-1 text-[#77581b]">{reindexSearch.data.warnings.slice(0, 2).join(" ")}</div>
-                ) : null}
-              </div>
-            ) : null}
-            {reindexSearch.isError ? (
-              <div className="rounded-md border border-[#e9b4c1] bg-white px-3 py-2 text-xs text-[#7b2d43]">
-                Reindex failed. {reindexSearch.error.message}
-              </div>
-            ) : null}
-          </PanelSection>
-
-          <PanelSection icon={<Database size={17} />} title="Data">
-            <button
-              type="button"
-              onClick={() => void window.paperPilot.openDataFolder()}
-              className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-md border border-stone-300 bg-white px-3 text-sm font-medium text-stone-700 transition hover:border-[#175c62] hover:text-[#175c62]"
-            >
-              Open data folder
-            </button>
-          </PanelSection>
-
-          <PanelSection icon={<KeyRound size={17} />} title="Credentials">
-            <select
-              value={selectedSource}
-              onChange={(event) => setSelectedSource(event.target.value as SourceId | "ai-gateway")}
-              className="field-input"
-            >
-              <option value="ai-gateway">Vercel AI Gateway</option>
-              {sources.map((source) => (
-                <option key={source.id} value={source.id}>
-                  {source.displayName}
-                </option>
-              ))}
-            </select>
-            <label className="field-label">API key, email, or token</label>
-            <input
-              value={secret}
-              onChange={(event) => setSecret(event.target.value)}
-              type="password"
-              className="field-input"
-              placeholder={credentialed.has(selectedSource) ? "Stored" : "Not configured"}
-            />
-            <button type="button" onClick={() => saveCredential.mutate()} disabled={!secret.trim()} className="primary-button">
-              Save credential
-            </button>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => testCredential.mutate()}
-                disabled={testCredential.isPending}
-                className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-stone-300 bg-white px-3 text-sm font-medium text-stone-700 transition hover:border-[#175c62] hover:text-[#175c62] disabled:opacity-50"
-              >
-                {testCredential.isPending ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
-                Test
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (window.confirm(`Remove the stored credential for ${selectedSource}?`)) removeCredential.mutate();
-                }}
-                disabled={!credentialed.has(selectedSource) || removeCredential.isPending}
-                className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-[#e9b4c1] bg-white px-3 text-sm font-medium text-[#7b2d43] transition hover:border-[#7b2d43] disabled:opacity-50"
-              >
-                <Trash2 size={14} />
-                Remove
-              </button>
-            </div>
-            {testCredential.data ? (
-              <div
-                className={`rounded-md border px-3 py-2 text-xs ${
-                  testCredential.data.ok ? "border-[#8aa66a] bg-[#edf4dc] text-[#476629]" : "border-[#d2b05f] bg-[#fbf0c9] text-[#77581b]"
-                }`}
-              >
-                {testCredential.data.detail}
-              </div>
-            ) : null}
-          </PanelSection>
-
-          <PanelSection icon={<Search size={17} />} title="Sources">
-            <div className="space-y-2">
-              {sources.map((source) => (
-                <div key={source.id} className="rounded-md border border-stone-200 bg-white p-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-medium">{source.displayName}</div>
-                      <div className="mt-1 text-xs text-stone-600">{source.kind}</div>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-2">
-                      <span
-                        className={`rounded px-2 py-1 text-[11px] ${
-                          source.stable ? "bg-[#d8eadf] text-[#175c62]" : "bg-[#f3d4dc] text-[#7b2d43]"
-                        }`}
-                      >
-                        {source.stable ? "stable" : "experimental"}
-                      </span>
-                      <label className="inline-flex items-center gap-1 text-[11px] text-stone-600">
-                        <input
-                          type="checkbox"
-                          checked={!disabledSourceIds.has(source.id)}
-                          onChange={(event) => toggleSource(source.id, event.target.checked)}
-                          className="size-4 accent-[#175c62]"
-                        />
-                        On
-                      </label>
-                    </div>
-                  </div>
-                  <div className="mt-2 text-xs leading-5 text-stone-600">{source.description}</div>
-                </div>
-              ))}
-            </div>
-          </PanelSection>
-
-          {activeProject ? (
-            <PanelSection icon={<ShieldCheck size={17} />} title="Project Policy">
-              <div className="grid grid-cols-3 gap-2">
-                {(["confirm", "project", "yolo"] as const).map((mode) => (
-                  <button
-                    key={mode}
-                    type="button"
-                    onClick={() => updatePolicy.mutate({ autonomy: mode })}
-                    className={`rounded-md border px-3 py-2 text-sm ${
-                      activeProject.policy.autonomy === mode ? "border-stone-950 bg-stone-950 text-white" : "border-stone-300 bg-white"
-                    }`}
-                  >
-                    {mode}
-                  </button>
-                ))}
-              </div>
-              <PolicyToggle
-                label="Auto-approve API source crawls"
-                checked={activeProject.policy.autoApproveSources}
-                onChange={(checked) => updatePolicy.mutate({ autoApproveSources: checked })}
-              />
-              <PolicyToggle
-                label="Auto-approve Python scripts"
-                checked={activeProject.policy.autoApproveScripts}
-                onChange={(checked) => updatePolicy.mutate({ autoApproveScripts: checked })}
-              />
-              <PolicyToggle
-                label="Auto-approve browser installs"
-                checked={activeProject.policy.autoApproveBrowserInstall}
-                onChange={(checked) => updatePolicy.mutate({ autoApproveBrowserInstall: checked })}
-              />
+                {(["system", "light", "dark"] as const).map((theme) => {
+                  const Icon = theme === "system" ? Monitor : theme === "light" ? Sun : Moon;
+                  return (
+                    <ToggleGroupItem key={theme} value={theme} disabled={isThemeSaving} className="w-full capitalize">
+                      <Icon size={14} />
+                      {theme}
+                    </ToggleGroupItem>
+                  );
+                })}
+              </ToggleGroup>
             </PanelSection>
-          ) : null}
-        </div>
-      </motion.aside>
-    </div>
+
+            <PanelSection icon={<Brain size={17} />} title="AI Provider">
+              <FieldLabel>Provider</FieldLabel>
+              <Select value={provider} onValueChange={(value) => changeProvider(value as AppSettings["ai"]["provider"])}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ollama">Ollama</SelectItem>
+                  <SelectItem value="vercel">Vercel AI Gateway</SelectItem>
+                  <SelectItem value="openai-compatible">OpenAI-compatible</SelectItem>
+                </SelectContent>
+              </Select>
+              <FieldLabel>Base URL</FieldLabel>
+              <Input value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} />
+              <FieldLabel>Model</FieldLabel>
+              <Input value={model} onChange={(event) => setModel(event.target.value)} />
+              {displayedHealth?.models.length ? (
+                <Select value={model} onValueChange={setModel}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {displayedHealth.models.map((modelName) => (
+                      <SelectItem key={modelName} value={modelName}>
+                        {modelName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : null}
+              <div className="grid grid-cols-2 gap-2">
+                <Button type="button" onClick={() => saveSettings.mutate()} disabled={saveSettings.isPending}>
+                  {saveSettings.isPending ? <Loader2 size={14} className="animate-spin" /> : null}
+                  Save AI settings
+                </Button>
+                <Button type="button" variant="outline" onClick={() => checkProvider.mutate()} disabled={checkProvider.isPending}>
+                  {checkProvider.isPending ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+                  Check
+                </Button>
+              </div>
+              {displayedHealth ? (
+                <Alert
+                  className={cn(
+                    displayedHealth.status === "ok" && "border-primary/40 bg-accent/45",
+                    displayedHealth.status === "warning" && "border-chart-4/45 bg-chart-4/10"
+                  )}
+                  variant={displayedHealth.status === "error" ? "destructive" : "default"}
+                >
+                  <AlertTitle>{displayedHealth.reachable ? "Reachable" : "Not reachable"}</AlertTitle>
+                  <AlertDescription>
+                    {displayedHealth.hasApiKey ? "Key stored" : "No key stored"}
+                    {displayedHealth.detail ? ` / ${displayedHealth.detail}` : ""}
+                  </AlertDescription>
+                </Alert>
+              ) : null}
+            </PanelSection>
+
+            <PanelSection icon={<Search size={17} />} title="Search Index">
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => reindexSearch.mutate(activeProject?.id)}
+                  disabled={!activeProject || reindexSearch.isPending}
+                >
+                  {reindexSearch.isPending ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                  Project
+                </Button>
+                <Button type="button" variant="outline" onClick={() => reindexSearch.mutate(undefined)} disabled={reindexSearch.isPending}>
+                  {reindexSearch.isPending ? <Loader2 size={14} className="animate-spin" /> : <Database size={14} />}
+                  All
+                </Button>
+              </div>
+              {reindexSearch.data ? (
+                <Alert>
+                  <AlertDescription>
+                    Indexed {reindexSearch.data.chunkCount} chunks from {reindexSearch.data.artifactCount} files and{" "}
+                    {reindexSearch.data.paperCount} papers.
+                    {reindexSearch.data.warnings.length ? (
+                      <div className="mt-1 text-chart-4">{reindexSearch.data.warnings.slice(0, 2).join(" ")}</div>
+                    ) : null}
+                  </AlertDescription>
+                </Alert>
+              ) : null}
+              {reindexSearch.isError ? (
+                <Alert variant="destructive">
+                  <AlertDescription>Reindex failed. {reindexSearch.error.message}</AlertDescription>
+                </Alert>
+              ) : null}
+            </PanelSection>
+
+            <PanelSection icon={<Database size={17} />} title="Data">
+              <Button type="button" variant="outline" onClick={() => void window.paperPilot.openDataFolder()} className="w-full">
+                Open data folder
+              </Button>
+            </PanelSection>
+
+            <PanelSection icon={<KeyRound size={17} />} title="Credentials">
+              <Select value={selectedSource} onValueChange={(value) => setSelectedSource(value as SourceId | "ai-gateway")}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ai-gateway">Vercel AI Gateway</SelectItem>
+                  {sources.map((source) => (
+                    <SelectItem key={source.id} value={source.id}>
+                      {source.displayName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FieldLabel>API key, email, or token</FieldLabel>
+              <Input
+                value={secret}
+                onChange={(event) => setSecret(event.target.value)}
+                type="password"
+                placeholder={credentialed.has(selectedSource) ? "Stored" : "Not configured"}
+              />
+              <Button type="button" onClick={() => saveCredential.mutate()} disabled={!secret.trim() || saveCredential.isPending} className="w-full">
+                {saveCredential.isPending ? <Loader2 size={14} className="animate-spin" /> : null}
+                Save credential
+              </Button>
+              <div className="grid grid-cols-2 gap-2">
+                <Button type="button" variant="outline" onClick={() => testCredential.mutate()} disabled={testCredential.isPending}>
+                  {testCredential.isPending ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+                  Test
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  onClick={() => {
+                    if (window.confirm(`Remove the stored credential for ${selectedSource}?`)) removeCredential.mutate();
+                  }}
+                  disabled={!credentialed.has(selectedSource) || removeCredential.isPending}
+                >
+                  <Trash2 size={14} />
+                  Remove
+                </Button>
+              </div>
+              {testCredential.data ? (
+                <Alert variant={testCredential.data.ok ? "default" : "destructive"}>
+                  <AlertDescription>{testCredential.data.detail}</AlertDescription>
+                </Alert>
+              ) : null}
+            </PanelSection>
+
+            <PanelSection icon={<Search size={17} />} title="Sources">
+              <div className="space-y-2">
+                {sources.map((source) => (
+                  <div key={source.id} className="rounded-lg border border-border bg-card p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-medium">{source.displayName}</div>
+                        <div className="mt-1 text-xs text-muted-foreground">{source.kind}</div>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <Badge variant={source.stable ? "secondary" : "destructive"}>{source.stable ? "stable" : "experimental"}</Badge>
+                        <label className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+                          <Checkbox
+                            checked={!disabledSourceIds.has(source.id)}
+                            onCheckedChange={(checked) => toggleSource(source.id, checked === true)}
+                          />
+                          On
+                        </label>
+                      </div>
+                    </div>
+                    <div className="mt-2 text-xs leading-5 text-muted-foreground">{source.description}</div>
+                  </div>
+                ))}
+              </div>
+            </PanelSection>
+
+            {activeProject ? (
+              <PanelSection icon={<ShieldCheck size={17} />} title="Project Policy">
+                <ToggleGroup
+                  type="single"
+                  value={activeProject.policy.autonomy}
+                  onValueChange={(value) => value && updatePolicy.mutate({ autonomy: value as Project["policy"]["autonomy"] })}
+                  variant="outline"
+                  className="grid w-full grid-cols-3"
+                >
+                  {(["confirm", "project", "yolo"] as const).map((mode) => (
+                    <ToggleGroupItem key={mode} value={mode} className="w-full">
+                      {mode}
+                    </ToggleGroupItem>
+                  ))}
+                </ToggleGroup>
+                <PolicyToggle
+                  label="Auto-approve API source crawls"
+                  checked={activeProject.policy.autoApproveSources}
+                  onChange={(checked) => updatePolicy.mutate({ autoApproveSources: checked })}
+                />
+                <PolicyToggle
+                  label="Auto-approve Python scripts"
+                  checked={activeProject.policy.autoApproveScripts}
+                  onChange={(checked) => updatePolicy.mutate({ autoApproveScripts: checked })}
+                />
+                <PolicyToggle
+                  label="Auto-approve browser installs"
+                  checked={activeProject.policy.autoApproveBrowserInstall}
+                  onChange={(checked) => updatePolicy.mutate({ autoApproveBrowserInstall: checked })}
+                />
+              </PanelSection>
+            ) : null}
+          </div>
+        </ScrollArea>
+        <Separator />
+      </SheetContent>
+    </Sheet>
   );
+}
+
+function FieldLabel({ children }: { children: string }): JSX.Element {
+  return <label className="block text-xs font-medium text-muted-foreground">{children}</label>;
 }

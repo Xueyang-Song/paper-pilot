@@ -3,23 +3,30 @@ import { atom, useAtom } from "jotai";
 import type { JSX } from "react";
 import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
-import type { Job } from "../shared/schemas";
+import type { AppSettings, Job } from "../shared/schemas";
 import { ArtifactPanel, ArtifactViewerModal } from "./components/artifacts";
 import { ChatWorkspace } from "./components/chat-workspace";
 import { JobDrawer } from "./components/job-drawer";
 import { ProjectRail } from "./components/project-rail";
 import { SearchPanel } from "./components/search-panel";
 import { SettingsPanel } from "./components/settings-panel";
-import { TopBar } from "./components/top-bar";
+import { Toaster } from "@/components/ui/sonner";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { WindowTitleBar } from "./components/window-title-bar";
 import "./styles.css";
 
 const queryClient = new QueryClient();
 const activeProjectIdAtom = atom<string | undefined>(undefined);
+type ThemePreference = AppSettings["ui"]["theme"];
+type ResolvedTheme = Exclude<ThemePreference, "system">;
 
 function Root(): JSX.Element {
   return (
     <QueryClientProvider client={queryClient}>
-      <App />
+      <TooltipProvider delayDuration={250}>
+        <App />
+        <Toaster />
+      </TooltipProvider>
     </QueryClientProvider>
   );
 }
@@ -69,6 +76,16 @@ function App(): JSX.Element {
     queryKey: ["settings"],
     queryFn: () => window.paperPilot.getSettings()
   });
+  const themePreference = settingsQuery.data?.ui.theme ?? "system";
+  const resolvedTheme = useResolvedTheme(themePreference);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    root.dataset.theme = resolvedTheme;
+    root.classList.toggle("dark", resolvedTheme === "dark");
+    root.style.colorScheme = resolvedTheme;
+    void window.paperPilot.setTitleBarTheme(resolvedTheme).catch(() => undefined);
+  }, [resolvedTheme]);
 
   const aiHealthQuery = useQuery({
     queryKey: ["ai-health", settingsQuery.data?.ai.provider, settingsQuery.data?.ai.baseUrl, settingsQuery.data?.ai.model, settingsQuery.data?.ai.hasApiKey],
@@ -149,12 +166,36 @@ function App(): JSX.Element {
     }
   });
 
+  const updateTheme = useMutation({
+    mutationFn: (theme: ThemePreference) => window.paperPilot.updateSettings({ ui: { theme } }),
+    onMutate: async (theme) => {
+      await queryClient.cancelQueries({ queryKey: ["settings"] });
+      const previous = queryClient.getQueryData<AppSettings>(["settings"]);
+      if (previous) {
+        queryClient.setQueryData<AppSettings>(["settings"], { ...previous, ui: { ...previous.ui, theme } });
+      }
+      return { previous };
+    },
+    onError: (_error, _theme, context) => {
+      if (context?.previous) queryClient.setQueryData(["settings"], context.previous);
+    },
+    onSettled: () => void queryClient.invalidateQueries({ queryKey: ["settings"] })
+  });
+
   const activeBundle = bundleQuery.data?.project.id === activeProjectId ? bundleQuery.data : undefined;
   const artifacts = activeBundle?.artifacts ?? [];
 
   return (
-    <main className="h-dvh min-h-0 overflow-hidden bg-[#f4efe6] text-stone-950">
-      <div className="grid h-full min-h-0 grid-cols-[280px_minmax(0,1fr)]">
+    <main className="flex h-dvh min-h-0 flex-col overflow-hidden bg-background text-foreground">
+      <WindowTitleBar
+        project={activeBundle?.project}
+        paperCount={activeBundle?.papers.length ?? 0}
+        artifactCount={activeBundle?.artifacts.length ?? 0}
+        aiHealth={aiHealthQuery.data}
+        onOpenSearch={() => setSearchOpen(true)}
+        onOpenSettings={() => setSettingsOpen(true)}
+      />
+      <div className="grid min-h-0 flex-1 grid-cols-[280px_minmax(0,1fr)] bg-background">
         <ProjectRail
           projects={projectsQuery.data ?? []}
           activeProjectId={activeProjectId}
@@ -169,16 +210,8 @@ function App(): JSX.Element {
           onExport={(projectId) => exportProject.mutateAsync(projectId)}
           onImport={() => importProject.mutateAsync()}
         />
-        <section className="relative flex min-h-0 min-w-0 flex-col border-l border-stone-300/80 bg-[#fbfaf6]">
-          <TopBar
-            project={activeBundle?.project}
-            paperCount={activeBundle?.papers.length ?? 0}
-            artifactCount={activeBundle?.artifacts.length ?? 0}
-            aiHealth={aiHealthQuery.data}
-            onOpenSearch={() => setSearchOpen(true)}
-            onOpenSettings={() => setSettingsOpen(true)}
-          />
-          <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_340px]">
+        <section className="relative flex min-h-0 min-w-0 flex-col border-l border-border bg-card">
+          <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(300px,340px)] overflow-hidden">
             <ChatWorkspace bundle={activeBundle} activeProjectId={activeProjectId} onProjectCreated={setActiveProjectId} />
             <ArtifactPanel
               projectId={activeProjectId}
@@ -229,16 +262,33 @@ function App(): JSX.Element {
           onClose={() => setSearchOpen(false)}
         />
       ) : null}
-      {settingsOpen ? (
-        <SettingsPanel
-          sources={sourcesQuery.data ?? []}
-          activeProject={activeBundle?.project}
-          aiHealth={aiHealthQuery.data}
-          onClose={() => setSettingsOpen(false)}
-        />
-      ) : null}
+      <SettingsPanel
+        open={settingsOpen}
+        sources={sourcesQuery.data ?? []}
+        activeProject={activeBundle?.project}
+        aiHealth={aiHealthQuery.data}
+        themePreference={themePreference}
+        isThemeSaving={updateTheme.isPending}
+        onThemeChange={(theme) => updateTheme.mutate(theme)}
+        onClose={() => setSettingsOpen(false)}
+      />
     </main>
   );
+}
+
+function useResolvedTheme(preference: ThemePreference): ResolvedTheme {
+  const [systemPrefersDark, setSystemPrefersDark] = useState(() => window.matchMedia("(prefers-color-scheme: dark)").matches);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+    const syncPreference = () => setSystemPrefersDark(mediaQuery.matches);
+    syncPreference();
+    mediaQuery.addEventListener("change", syncPreference);
+    return () => mediaQuery.removeEventListener("change", syncPreference);
+  }, []);
+
+  if (preference === "system") return systemPrefersDark ? "dark" : "light";
+  return preference;
 }
 
 createRoot(document.getElementById("root")!).render(<Root />);

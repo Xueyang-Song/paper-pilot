@@ -1,10 +1,19 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Archive, CheckSquare, Download, FilePlus2, Info, Loader2, Pencil, RefreshCw, Save, Square, Star, Trash2, X } from "lucide-react";
 import type { JSX } from "react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { Artifact, Paper, PaperScore, PaperUpdate } from "../../shared/schemas";
 import { Metric } from "./ui";
 import { ArtifactIcon, buildArtifactRows, scoreComponentRows, type ArtifactScoreTarget } from "./artifact-helpers";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Progress } from "@/components/ui/progress";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 
 export function ArtifactPanel({
   projectId,
@@ -73,37 +82,40 @@ export function ArtifactPanel({
     });
   }
   return (
-    <aside className="flex min-h-0 flex-col border-l border-stone-200 bg-[#f1f5f1]">
-      <div className="flex h-12 items-center justify-between border-b border-stone-200 px-4">
+    <aside className="flex min-h-0 min-w-0 flex-col overflow-hidden border-l border-border bg-muted/35">
+      <div className="flex h-12 items-center justify-between border-b border-border bg-card px-4">
         <div className="text-sm font-semibold">Artifacts</div>
-        <Archive size={16} className="text-stone-600" />
+        <Archive size={16} className="text-muted-foreground" />
       </div>
-      <div className="min-h-0 overflow-y-auto p-3">
+      <ScrollArea className="min-h-0 min-w-0 w-full flex-1">
+      <div className="min-w-0 p-3 pr-4">
         <div className="mb-3 grid grid-cols-2 gap-2">
           <Metric label="Papers" value={papers.length} />
           <Metric label="Files" value={artifacts.length} />
         </div>
-        <div className="mb-3 rounded-md border border-stone-200 bg-white p-2 shadow-sm">
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <button
+        <Card className="mb-3 w-full max-w-full min-w-0 rounded-lg border-border bg-card p-2 py-2 shadow-sm">
+          <div className="mb-2 flex min-w-0 items-center justify-between gap-2">
+            <Button
               type="button"
+              variant="outline"
+              size="sm"
               onClick={() =>
                 setSelectedIds(allVisibleSelected ? new Set() : new Set(artifactRows.map((row) => row.artifact.id)))
               }
-              className="inline-flex h-8 items-center gap-2 rounded-md border border-stone-300 px-2 text-xs font-medium text-stone-700 transition hover:border-[#175c62] hover:text-[#175c62]"
             >
               {allVisibleSelected ? <CheckSquare size={13} /> : <Square size={13} />}
               {selectedArtifactIds.length ? `${selectedArtifactIds.length} selected` : "Select"}
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="outline"
+              size="sm"
               onClick={() => importArtifacts.mutate()}
               disabled={!projectId || importArtifacts.isPending}
-              className="inline-flex h-8 items-center gap-2 rounded-md border border-stone-300 px-2 text-xs font-medium text-stone-700 transition hover:border-[#175c62] hover:text-[#175c62] disabled:opacity-50"
             >
               {importArtifacts.isPending ? <Loader2 size={13} className="animate-spin" /> : <FilePlus2 size={13} />}
               Import
-            </button>
+            </Button>
           </div>
           <div className="grid grid-cols-3 gap-1">
             <BulkButton
@@ -130,30 +142,31 @@ export function ArtifactPanel({
               }}
             />
           </div>
-        </div>
-        <div className="mb-3 flex items-center justify-between gap-2 rounded-md border border-stone-200 bg-white p-3 shadow-sm">
+        </Card>
+        <Card className="mb-3 w-full max-w-full min-w-0 flex-row items-center justify-between gap-2 rounded-lg border-border bg-card p-3 py-3 shadow-sm">
           <div className="min-w-0">
-            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-stone-600">Scores</div>
-            <div className="mt-0.5 truncate text-[11px] text-stone-500">
+            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Scores</div>
+            <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
               {scoredCount}/{papers.length} papers scored
             </div>
           </div>
-          <button
+          <Button
             type="button"
+            variant="outline"
+            size="sm"
             onClick={() => scorePapers.mutate()}
             disabled={!projectId || !papers.length || scorePapers.isPending}
-            className="inline-flex h-8 items-center gap-2 rounded-md border border-stone-300 bg-white px-3 text-xs font-medium text-stone-700 transition hover:border-[#175c62] hover:text-[#175c62] disabled:opacity-50"
           >
             {scorePapers.isPending ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
             Score
-          </button>
-        </div>
+          </Button>
+        </Card>
         {scorePapers.isError ? (
-          <div className="mb-3 rounded-md border border-[#e9b4c1] bg-white px-3 py-2 text-xs text-[#7b2d43]">
+          <div className="mb-3 rounded-lg border border-destructive/40 bg-card px-3 py-2 text-xs text-destructive">
             Could not score papers. {scorePapers.error.message}
           </div>
         ) : null}
-        <div className="space-y-2">
+        <div className="flex min-w-0 flex-col gap-2">
           {artifactRows.map(({ artifact, scoreTarget, sourceLabel }) => (
             <ArtifactFileCard
               key={artifact.id}
@@ -167,12 +180,13 @@ export function ArtifactPanel({
             />
           ))}
           {!artifacts.length ? (
-            <div className="rounded-md border border-dashed border-stone-300 bg-white/70 p-4 text-sm text-stone-600">
+            <div className="rounded-lg border border-dashed border-border bg-card/70 p-4 text-sm text-muted-foreground">
               Crawl outputs, Markdown conversions, logs, and briefs appear here.
             </div>
           ) : null}
         </div>
       </div>
+      </ScrollArea>
     </aside>
   );
 }
@@ -215,28 +229,30 @@ function ArtifactFileCard({
     onSuccess: () => refreshProject(projectId, queryClient)
   });
   return (
-    <article className="rounded-md border border-stone-200 bg-white p-3 shadow-sm transition hover:border-[#175c62] hover:shadow-md">
-      <div className="mb-2 flex items-start gap-2">
-        <button
+    <Card className="w-full max-w-full min-w-0 overflow-visible rounded-lg border-border bg-card p-3 py-3 shadow-sm transition hover:border-primary/70 hover:shadow-md">
+      <div className="flex min-w-0 items-start gap-2">
+        <Button
           type="button"
+          variant={selected ? "secondary" : "outline"}
+          size="icon-sm"
           onClick={onToggleSelected}
           title={selected ? "Deselect file" : "Select file"}
           aria-label={selected ? "Deselect file" : "Select file"}
-          className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-md border border-stone-200 text-stone-600 transition hover:border-[#175c62] hover:text-[#175c62]"
+          className="mt-0.5 shrink-0"
         >
           {selected ? <CheckSquare size={14} /> : <Square size={14} />}
-        </button>
+        </Button>
         {editingTitle ? (
           <div className="flex min-w-0 flex-1 items-start gap-2 text-left">
-            <ArtifactIcon artifact={artifact} className="mt-0.5 shrink-0 text-[#7b2d43]" />
-            <span className="min-w-0 flex-1">
-              <input
+            <ArtifactIcon artifact={artifact} className="mt-0.5 shrink-0 text-primary" />
+            <span className="min-w-0 flex-1 overflow-hidden">
+              <Input
                 value={draftTitle}
                 onChange={(event) => setDraftTitle(event.target.value)}
-                className="h-7 w-full rounded-md border border-stone-300 px-2 text-xs text-stone-900 outline-none focus:border-[#175c62]"
+                className="h-7 text-xs"
                 maxLength={180}
               />
-              <span className="mt-0.5 flex min-w-0 flex-wrap gap-x-2 gap-y-0.5 text-xs text-stone-500">
+              <span className="mt-0.5 flex min-w-0 flex-wrap gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
                 <span>{artifact.type}</span>
                 {sourceLabel ? <span className="truncate">From {sourceLabel}</span> : null}
               </span>
@@ -246,18 +262,20 @@ function ArtifactFileCard({
           <button
             type="button"
             onClick={() => onOpenArtifact(artifact.id)}
-            className="flex min-w-0 flex-1 items-start gap-2 text-left"
+            className="flex min-w-0 flex-1 items-start gap-2 overflow-hidden text-left"
           >
-          <ArtifactIcon artifact={artifact} className="mt-0.5 shrink-0 text-[#7b2d43]" />
-          <span className="min-w-0">
+          <ArtifactIcon artifact={artifact} className="mt-0.5 shrink-0 text-primary" />
+          <span className="min-w-0 flex-1 overflow-hidden">
             <span className="block truncate text-sm font-medium">{artifact.title}</span>
-            <span className="mt-0.5 flex min-w-0 flex-wrap gap-x-2 gap-y-0.5 text-xs text-stone-500">
+            <span className="mt-0.5 flex min-w-0 flex-wrap gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
               <span>{artifact.type}</span>
               {sourceLabel ? <span className="truncate">From {sourceLabel}</span> : null}
             </span>
           </span>
           </button>
         )}
+      </div>
+      <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1 border-t border-border/70 pt-2">
         {editingTitle ? (
           <div className="flex shrink-0 gap-1">
             <TinyIcon label="Save title" onClick={() => renameArtifact.mutate()} disabled={renameArtifact.isPending}>
@@ -279,9 +297,8 @@ function ArtifactFileCard({
           </TinyIcon>
         )}
         <ArtifactScoreControl target={scoreTarget} />
-      </div>
       {scoreTarget?.paper ? (
-        <div className="mt-2 flex items-center gap-1 border-t border-stone-100 pt-2">
+        <>
           <TinyIcon
             label={scoreTarget.paper.favorite ? "Remove favorite" : "Favorite paper"}
             active={scoreTarget.paper.favorite}
@@ -289,67 +306,107 @@ function ArtifactFileCard({
           >
             <Star size={12} />
           </TinyIcon>
-          <select
+          <Select
             value={scoreTarget.paper.userStatus ?? "unread"}
-            onChange={(event) => updatePaper.mutate({ userStatus: event.target.value as Paper["userStatus"] })}
-            className="h-7 min-w-0 rounded-md border border-stone-300 bg-white px-2 text-xs text-stone-700 outline-none focus:border-[#175c62]"
+            onValueChange={(value) => updatePaper.mutate({ userStatus: value as Paper["userStatus"] })}
           >
-            <option value="unread">Unread</option>
-            <option value="to-read">To read</option>
-            <option value="reading">Reading</option>
-            <option value="read">Read</option>
-            <option value="rejected">Rejected</option>
-          </select>
+            <SelectTrigger size="sm" className="h-7 w-32 min-w-0">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="unread">Unread</SelectItem>
+              <SelectItem value="to-read">To read</SelectItem>
+              <SelectItem value="reading">Reading</SelectItem>
+              <SelectItem value="read">Read</SelectItem>
+              <SelectItem value="rejected">Rejected</SelectItem>
+            </SelectContent>
+          </Select>
           {scoreTarget.paper.tags?.length ? (
-            <span className="truncate text-[11px] text-stone-500">{scoreTarget.paper.tags.slice(0, 2).join(", ")}</span>
+            <span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">{scoreTarget.paper.tags.slice(0, 2).join(", ")}</span>
           ) : null}
-        </div>
+        </>
       ) : null}
-    </article>
+      </div>
+    </Card>
   );
 }
 export function ArtifactScoreControl({ target }: { target?: ArtifactScoreTarget }): JSX.Element | null {
+  const triggerRef = useRef<HTMLDivElement>(null);
+  const [popoverPosition, setPopoverPosition] = useState<ScorePopoverPosition | undefined>(undefined);
   if (!target) return null;
   const score = target.score;
+
+  function showPopover(): void {
+    const trigger = triggerRef.current;
+    if (!trigger) return;
+    const rect = trigger.getBoundingClientRect();
+    const width = 288;
+    const margin = 12;
+    const estimatedHeight = 330;
+    const left = Math.max(margin, Math.min(rect.right - width, window.innerWidth - width - margin));
+    const top =
+      rect.bottom + estimatedHeight + margin > window.innerHeight
+        ? Math.max(margin, rect.top - estimatedHeight - 8)
+        : rect.bottom + 8;
+    setPopoverPosition({ left, top });
+  }
+
   return (
     <div className="flex shrink-0 items-center gap-1">
       <ScoreChip score={score} />
-      <div className="group/info relative">
-        <button
+      <div
+        ref={triggerRef}
+        className="relative"
+        onMouseEnter={showPopover}
+        onMouseLeave={() => setPopoverPosition(undefined)}
+        onFocusCapture={showPopover}
+        onBlurCapture={() => setPopoverPosition(undefined)}
+      >
+        <Button
           type="button"
+          variant="outline"
+          size="icon-sm"
           aria-label="Score details"
-          className="grid size-7 place-items-center rounded-md border border-stone-200 bg-white text-stone-500 transition hover:border-[#175c62] hover:text-[#175c62]"
+          onMouseEnter={showPopover}
+          onFocus={showPopover}
+          onClick={showPopover}
         >
           <Info size={13} />
-        </button>
-        <ScoreDetailsPopover target={target} />
+        </Button>
+        {popoverPosition ? createPortal(<ScoreDetailsPopover target={target} position={popoverPosition} />, document.body) : null}
       </div>
     </div>
   );
 }
 export function ScoreChip({ score }: { score?: PaperScore }): JSX.Element {
   return (
-    <span className={`rounded-md border px-2 py-1 text-xs font-semibold tabular-nums ${scoreBadgeClasses(score?.label)}`}>
+    <Badge variant="outline" className={`h-7 rounded-lg px-2 text-xs font-semibold tabular-nums ${scoreBadgeClasses(score?.label)}`}>
       {score ? Math.round(score.overall) : "--"}
-    </span>
+    </Badge>
   );
 }
-function ScoreDetailsPopover({ target }: { target: ArtifactScoreTarget }): JSX.Element {
+interface ScorePopoverPosition {
+  left: number;
+  top: number;
+}
+
+function ScoreDetailsPopover({ target, position }: { target: ArtifactScoreTarget; position: ScorePopoverPosition }): JSX.Element {
   const score = target.score;
   return (
-    <div className="pointer-events-none absolute right-0 top-8 z-30 w-72 translate-y-1 rounded-md border border-stone-200 bg-white p-3 text-left opacity-0 shadow-xl transition group-hover/info:translate-y-0 group-hover/info:opacity-100 group-focus-within/info:translate-y-0 group-focus-within/info:opacity-100">
+    <div
+      className="pointer-events-none fixed z-[80] max-h-[calc(100vh-1.5rem)] w-72 overflow-auto rounded-lg border border-border bg-popover p-3 text-left text-popover-foreground opacity-100 shadow-xl"
+      style={{ left: position.left, top: position.top }}
+    >
       <div className="mb-2 flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="truncate text-sm font-semibold text-stone-900">{target.title}</div>
-          <div className="mt-0.5 text-[11px] text-stone-500">{target.subtitle}</div>
+          <div className="truncate text-sm font-semibold text-foreground">{target.title}</div>
+          <div className="mt-0.5 text-[11px] text-muted-foreground">{target.subtitle}</div>
         </div>
-        <span className={`rounded-md border px-2 py-1 text-xs font-semibold tabular-nums ${scoreBadgeClasses(score?.label)}`}>
-          {score ? Math.round(score.overall) : "--"}
-        </span>
+        <ScoreChip score={score} />
       </div>
       {score ? (
         <>
-          <div className="mb-2 text-[11px] font-medium uppercase tracking-[0.12em] text-stone-500">{score.label}</div>
+          <div className="mb-2 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">{score.label}</div>
           <div className="space-y-1.5">
             {scoreComponentRows(score).map((component) => (
               <ScoreBar key={component.label} label={component.label} value={component.value} />
@@ -357,25 +414,23 @@ function ScoreDetailsPopover({ target }: { target: ArtifactScoreTarget }): JSX.E
           </div>
           <div className="mt-3 space-y-1">
             {score.reasons.slice(0, 3).map((reason) => (
-              <div key={reason} className="text-[11px] leading-4 text-stone-600">
+              <div key={reason} className="text-[11px] leading-4 text-muted-foreground">
                 {reason}
               </div>
             ))}
           </div>
         </>
       ) : (
-        <div className="text-[11px] leading-4 text-stone-600">Run Score to calculate paper quality details for this file.</div>
+        <div className="text-[11px] leading-4 text-muted-foreground">Run Score to calculate paper quality details for this file.</div>
       )}
     </div>
   );
 }
 function ScoreBar({ label, value }: { label: string; value: number }): JSX.Element {
   return (
-    <div className="grid grid-cols-[72px_minmax(0,1fr)_30px] items-center gap-2 text-[11px] text-stone-600">
+    <div className="grid grid-cols-[72px_minmax(0,1fr)_30px] items-center gap-2 text-[11px] text-muted-foreground">
       <span className="truncate">{label}</span>
-      <span className="h-1.5 overflow-hidden rounded-full bg-stone-200">
-        <span className="block h-full rounded-full bg-[#175c62]" style={{ width: `${Math.max(4, Math.min(100, value))}%` }} />
-      </span>
+      <Progress value={Math.max(4, Math.min(100, value))} />
       <span className="text-right tabular-nums">{Math.round(value)}</span>
     </div>
   );
@@ -383,17 +438,17 @@ function ScoreBar({ label, value }: { label: string; value: number }): JSX.Eleme
 function scoreBadgeClasses(label?: PaperScore["label"]): string {
   switch (label) {
     case "excellent":
-      return "border-[#175c62] bg-[#d8eadf] text-[#175c62]";
+      return "border-primary/50 bg-primary/15 text-primary";
     case "strong":
-      return "border-[#8aa66a] bg-[#edf4dc] text-[#476629]";
+      return "border-chart-2/50 bg-chart-2/15 text-chart-2";
     case "solid":
-      return "border-[#d2b05f] bg-[#fbf0c9] text-[#77581b]";
+      return "border-chart-4/50 bg-chart-4/15 text-chart-4";
     case "emerging":
-      return "border-[#d59670] bg-[#f8e2d1] text-[#854a2a]";
+      return "border-chart-5/50 bg-chart-5/15 text-chart-5";
     case "limited":
-      return "border-[#c77c8c] bg-[#f3d4dc] text-[#7b2d43]";
+      return "border-destructive/50 bg-destructive/15 text-destructive";
     default:
-      return "border-stone-300 bg-stone-100 text-stone-500";
+      return "border-border bg-muted text-muted-foreground";
   }
 }
 
@@ -411,19 +466,17 @@ function BulkButton({
   onClick(): void;
 }): JSX.Element {
   return (
-    <button
+    <Button
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`inline-flex h-8 items-center justify-center gap-1 rounded-md border px-2 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-45 ${
-        danger
-          ? "border-[#e9b4c1] text-[#7b2d43] hover:border-[#7b2d43]"
-          : "border-stone-300 text-stone-700 hover:border-[#175c62] hover:text-[#175c62]"
-      }`}
+      variant={danger ? "destructive" : "outline"}
+      size="sm"
+      className="h-8 w-full min-w-0 gap-1 px-1.5 text-xs"
     >
       {icon}
-      {label}
-    </button>
+      <span className="truncate">{label}</span>
+    </Button>
   );
 }
 
@@ -441,20 +494,18 @@ function TinyIcon({
   children: JSX.Element;
 }): JSX.Element {
   return (
-    <button
+    <Button
       type="button"
       title={label}
       aria-label={label}
       onClick={onClick}
       disabled={disabled}
-      className={`grid size-7 shrink-0 place-items-center rounded-md border transition disabled:opacity-50 ${
-        active
-          ? "border-[#d2b05f] bg-[#fbf0c9] text-[#77581b]"
-          : "border-stone-200 bg-white text-stone-500 hover:border-[#175c62] hover:text-[#175c62]"
-      }`}
+      variant={active ? "secondary" : "outline"}
+      size="icon-sm"
+      className={cn("shrink-0", active && "text-chart-4")}
     >
       {children}
-    </button>
+    </Button>
   );
 }
 

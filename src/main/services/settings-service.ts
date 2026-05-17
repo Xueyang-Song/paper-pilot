@@ -6,6 +6,9 @@ import type { CredentialService } from "./credential-service.js";
 import { DEFAULT_OLLAMA_BASE_URL, DEFAULT_OLLAMA_MODEL } from "./ollama-config.js";
 
 const defaults: AppSettings = appSettingsSchema.parse({
+  ui: {
+    theme: "system"
+  },
   ai: {
     provider: "ollama",
     baseUrl: DEFAULT_OLLAMA_BASE_URL,
@@ -42,6 +45,7 @@ export class SettingsService {
   async update(patch: Partial<AppSettings>): Promise<AppSettings> {
     const current = await this.get();
     const next = appSettingsSchema.parse({
+      ui: { ...current.ui, ...patch.ui },
       ai: { ...current.ai, ...patch.ai, hasApiKey: this.credentials.has("ai-gateway") },
       python: { ...current.python, ...patch.python },
       sources: { ...current.sources, ...patch.sources }
