@@ -13,12 +13,17 @@ import {
   Pin,
   PinOff,
   Search,
-  ShieldCheck,
   Trash2,
   X
 } from "lucide-react";
 import type { Project } from "../../shared/schemas";
 import { IconButton } from "./ui";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 
 export function ProjectRail(props: {
   projects: Project[];
@@ -42,15 +47,13 @@ export function ProjectRail(props: {
   const activeProjects = filteredProjects.filter((project) => !project.archivedAt);
   const archivedProjects = filteredProjects.filter((project) => project.archivedAt);
   return (
-    <aside className="flex min-h-0 flex-col bg-[#e8dfd2]">
-      <div className="flex h-16 items-center justify-between border-b border-stone-300 px-4">
-        <div className="flex items-center gap-3">
-          <div className="grid size-9 place-items-center rounded-md bg-stone-950 text-[#f4efe6]">
-            <FlaskConical size={18} />
-          </div>
-          <div>
-            <div className="text-sm font-semibold tracking-wide">Paper Pilot</div>
-            <div className="text-xs text-stone-600">Local research agent</div>
+    <aside className="flex min-h-0 min-w-0 flex-col bg-sidebar text-sidebar-foreground">
+      <div className="flex h-12 items-center justify-between border-b border-sidebar-border px-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <FlaskConical size={16} className="text-primary" />
+          <div className="min-w-0">
+            <div className="truncate text-sm font-semibold">Projects</div>
+            <div className="truncate text-[11px] text-muted-foreground">{activeProjects.length} active</div>
           </div>
         </div>
         <div className="flex gap-1">
@@ -62,17 +65,18 @@ export function ProjectRail(props: {
           </IconButton>
         </div>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto p-3">
-        <div className="mb-3 flex items-center gap-2 rounded-md border border-stone-300 bg-white/70 px-2">
-          <Search size={14} className="shrink-0 text-stone-500" />
-          <input
+      <ScrollArea className="min-h-0 flex-1">
+        <div className="p-3">
+          <div className="mb-3 flex items-center gap-2 rounded-lg border border-sidebar-border bg-background/50 px-2">
+          <Search size={14} className="shrink-0 text-muted-foreground" />
+          <Input
             value={filter}
             onChange={(event) => setFilter(event.target.value)}
             placeholder="Search projects"
-            className="h-9 min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-stone-500"
+            className="h-9 min-w-0 flex-1 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
           />
         </div>
-        <div className="mb-2 px-2 text-xs font-medium uppercase tracking-[0.14em] text-stone-600">Projects</div>
+        <div className="mb-2 px-2 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Projects</div>
         <div className="space-y-1">
           {activeProjects.map((project) => (
             <ProjectRailItem
@@ -90,14 +94,14 @@ export function ProjectRail(props: {
             />
           ))}
           {!filteredProjects.length ? (
-            <div className="rounded-md border border-dashed border-stone-400 px-3 py-4 text-sm text-stone-600">
-              {props.projects.length ? "No projects match that search." : "Create a project from chat or the toolbar."}
-            </div>
+            <Alert className="border-dashed">
+              <AlertDescription>{props.projects.length ? "No projects match that search." : "Create a project from chat or the title bar."}</AlertDescription>
+            </Alert>
           ) : null}
         </div>
         {archivedProjects.length ? (
           <div className="mt-5">
-            <div className="mb-2 px-2 text-xs font-medium uppercase tracking-[0.14em] text-stone-600">Archived</div>
+            <div className="mb-2 px-2 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Archived</div>
             <div className="space-y-1">
               {archivedProjects.map((project) => (
                 <ProjectRailItem
@@ -117,16 +121,8 @@ export function ProjectRail(props: {
             </div>
           </div>
         ) : null}
-      </div>
-      <div className="border-t border-stone-300 p-3">
-        <div className="rounded-md bg-[#d8eadf] p-3 text-xs text-stone-800">
-          <div className="mb-1 flex items-center gap-2 font-semibold">
-            <ShieldCheck size={14} />
-            Local-first storage
-          </div>
-          SQLite, artifacts, keys, scripts, and logs stay on this machine.
         </div>
-      </div>
+      </ScrollArea>
     </aside>
   );
 }
@@ -219,7 +215,7 @@ function ProjectRailItem({
 
   if (editing) {
     return (
-      <div className={`rounded-md px-3 py-2 ${selected ? "bg-stone-950 text-[#f4efe6] shadow-sm" : "bg-white/70 text-stone-800"}`}>
+      <div className={cn("rounded-lg px-3 py-2", selected ? "bg-primary text-primary-foreground shadow-sm" : "bg-card text-card-foreground")}>
         <form
           className="space-y-2"
           onSubmit={(event) => {
@@ -237,25 +233,25 @@ function ProjectRailItem({
             disabled={saving}
             className={`h-8 w-full rounded-md border px-2 text-sm font-medium outline-none ${
               selected
-                ? "border-stone-600 bg-stone-900 text-[#f4efe6] focus:border-[#d8eadf]"
-                : "border-stone-300 bg-white text-stone-900 focus:border-[#175c62]"
+                ? "border-primary-foreground/30 bg-primary-foreground/10 text-primary-foreground focus:border-primary-foreground/70"
+                : "border-input bg-background text-foreground focus:border-ring"
             }`}
             maxLength={120}
           />
-          <input
+          <Input
             value={draftTopic}
             onChange={(event) => setDraftTopic(event.target.value)}
             disabled={saving}
             placeholder="Topic"
-            className="h-8 w-full rounded-md border border-stone-300 bg-white px-2 text-xs text-stone-900 outline-none focus:border-[#175c62]"
+            className={cn("h-8 text-xs", selected && "border-primary-foreground/30 bg-primary-foreground/10 text-primary-foreground placeholder:text-primary-foreground/55")}
             maxLength={240}
           />
-          <textarea
+          <Textarea
             value={draftDescription}
             onChange={(event) => setDraftDescription(event.target.value)}
             disabled={saving}
             placeholder="Description"
-            className="min-h-16 w-full resize-none rounded-md border border-stone-300 bg-white px-2 py-1.5 text-xs text-stone-900 outline-none focus:border-[#175c62]"
+            className={cn("min-h-16 resize-none text-xs", selected && "border-primary-foreground/30 bg-primary-foreground/10 text-primary-foreground placeholder:text-primary-foreground/55")}
             maxLength={2000}
           />
           <div className="flex gap-1">
@@ -267,20 +263,21 @@ function ProjectRailItem({
             </ActionIcon>
           </div>
         </form>
-        {error ? <div className={`mt-1 text-xs ${selected ? "text-[#f3d4dc]" : "text-[#7b2d43]"}`}>{error}</div> : null}
+        {error ? <div className={`mt-1 text-xs ${selected ? "text-primary-foreground/85" : "text-destructive"}`}>{error}</div> : null}
       </div>
     );
   }
 
   return (
     <div
-      className={`group flex w-full items-start gap-2 rounded-md px-3 py-2 text-left transition ${
-        selected ? "bg-stone-950 text-[#f4efe6] shadow-sm" : "text-stone-800 hover:bg-white/60"
-      }`}
+      className={cn(
+        "group flex w-full items-start gap-2 rounded-lg px-3 py-2 text-left transition",
+        selected ? "bg-primary text-primary-foreground shadow-sm" : "text-sidebar-foreground hover:bg-sidebar-accent"
+      )}
     >
       <button type="button" onClick={() => onSelect(project.id)} className="min-w-0 flex-1 text-left">
         <div className="truncate text-sm font-medium">{project.title}</div>
-        <div className={`mt-1 truncate text-xs ${selected ? "text-stone-300" : "text-stone-600"}`}>
+        <div className={cn("mt-1 truncate text-xs", selected ? "text-primary-foreground/70" : "text-muted-foreground")}>
           {project.archivedAt ? "Archived" : project.topic || new Date(project.updatedAt).toLocaleString()}
         </div>
       </button>
@@ -340,12 +337,12 @@ function RailAction({
       title={label}
       aria-label={label}
       onClick={onClick}
-      className={`grid size-6 place-items-center rounded-md border transition ${
+      className={`window-no-drag grid size-6 place-items-center rounded-md border transition ${
         selected
-          ? "border-stone-700 text-stone-300 hover:bg-stone-800"
+          ? "border-primary-foreground/25 text-primary-foreground/75 hover:bg-primary-foreground/10"
           : danger
-            ? "border-stone-300 bg-white/70 text-[#7b2d43] hover:border-[#7b2d43]"
-            : "border-stone-300 bg-white/70 text-stone-600 hover:border-[#175c62] hover:text-[#175c62]"
+            ? "border-border bg-card text-destructive hover:border-destructive"
+            : "border-border bg-card text-muted-foreground hover:border-primary hover:text-primary"
       }`}
     >
       {children}
@@ -369,17 +366,17 @@ function ActionIcon({
   children: JSX.Element;
 }): JSX.Element {
   return (
-    <button
+    <Button
       type={type}
       onClick={onClick}
       disabled={disabled}
       title={label}
       aria-label={label}
-      className={`grid size-8 shrink-0 place-items-center rounded-md border transition ${
-        selected ? "border-stone-600 text-[#d8eadf] hover:bg-stone-800" : "border-stone-300 text-stone-700 hover:bg-stone-100"
-      } disabled:opacity-50`}
+      variant={selected ? "secondary" : "outline"}
+      size="icon"
+      className="window-no-drag"
     >
       {children}
-    </button>
+    </Button>
   );
 }

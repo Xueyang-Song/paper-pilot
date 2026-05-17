@@ -5,6 +5,10 @@ import { useEffect, useRef, useState } from "react";
 import type { Message } from "../../shared/schemas";
 import type { ProjectBundle } from "../types";
 import { MarkdownMessage } from "./ui";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 
 export function ChatWorkspace(props: {
   bundle?: ProjectBundle;
@@ -78,7 +82,7 @@ export function ChatWorkspace(props: {
   }, [messages.length, sendChat.isPending]);
 
   return (
-    <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+    <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
       <div ref={scrollRegionRef} className="min-h-0 flex-1 overflow-y-auto px-8 py-6">
         {messages.length ? (
           <div className="mx-auto flex max-w-4xl flex-col gap-4">
@@ -92,7 +96,7 @@ export function ChatWorkspace(props: {
           <div className="grid h-full place-items-center">
             <div className="w-full max-w-3xl">
               <div className="mb-5 flex items-center justify-center">
-                <div className="grid size-12 place-items-center rounded-md bg-stone-950 text-[#f4efe6]">
+                <div className="grid size-12 place-items-center rounded-lg bg-primary text-primary-foreground shadow-sm shadow-primary/20">
                   <Bot size={24} />
                 </div>
               </div>
@@ -103,101 +107,104 @@ export function ChatWorkspace(props: {
                   "Find open-access work about perovskite solar stability",
                   "Search literature on climate attribution models since 2022"
                 ].map((prompt) => (
-                  <button
+                  <Button
                     key={prompt}
                     type="button"
+                    variant="outline"
                     onClick={() => setDraft(prompt)}
-                    className="min-h-20 rounded-md border border-stone-300 bg-white px-3 py-2 text-left text-sm text-stone-700 shadow-sm transition hover:border-stone-500"
+                    className="h-auto min-h-20 justify-start whitespace-normal rounded-lg px-3 py-2 text-left text-sm text-muted-foreground"
                   >
                     {prompt}
-                  </button>
+                  </Button>
                 ))}
               </div>
             </div>
           </div>
         )}
       </div>
-      <form onSubmit={submit} className="shrink-0 border-t border-stone-200 bg-[#fbfaf6] p-5">
+      <form onSubmit={submit} className="shrink-0 border-t border-border bg-card p-5">
         <div className="mx-auto max-w-4xl">
-          <div className="rounded-md border border-stone-300 bg-white shadow-sm">
-            <textarea
+          <Card className="rounded-lg border-border bg-card py-0 shadow-sm">
+            <Textarea
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
               rows={3}
               placeholder="Ask Paper Pilot to crawl papers, analyze findings, or generate a brief..."
-              className="block max-h-40 min-h-24 w-full resize-none rounded-t-md border-0 bg-transparent px-4 py-3 text-sm outline-none placeholder:text-stone-400"
+              className="max-h-40 min-h-24 resize-none rounded-b-none border-0 bg-transparent px-4 py-3 shadow-none focus-visible:ring-0 dark:bg-transparent"
             />
-            <div className="flex items-center justify-between border-t border-stone-200 px-3 py-2">
+            <div className="flex items-center justify-between border-t border-border bg-transparent px-3 py-2">
               <div className="flex gap-2">
-                <button
+                <Button
                   type="button"
+                  variant="outline"
                   onClick={() => runBrief.mutate()}
                   disabled={!props.activeProjectId || runBrief.isPending}
-                  className="inline-flex h-9 items-center gap-2 rounded-md border border-stone-300 px-3 text-sm text-stone-700 transition hover:bg-stone-100 disabled:opacity-50"
                 >
                   <FileText size={16} />
                   Brief
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
+                  variant="outline"
                   onClick={() => setDraft("Crawl open-access papers about ")}
-                  className="inline-flex h-9 items-center gap-2 rounded-md border border-stone-300 px-3 text-sm text-stone-700 transition hover:bg-stone-100"
                 >
                   <Search size={16} />
                   Crawl
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
+                  variant="outline"
                   onClick={() => importArtifacts.mutate()}
                   disabled={!props.activeProjectId || importArtifacts.isPending}
-                  className="inline-flex h-9 items-center gap-2 rounded-md border border-stone-300 px-3 text-sm text-stone-700 transition hover:bg-stone-100 disabled:opacity-50"
                 >
                   {importArtifacts.isPending ? <Loader2 size={16} className="animate-spin" /> : <Paperclip size={16} />}
                   Attach
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
+                  variant="outline"
+                  size="icon"
                   onClick={() => lastUserMessage && setDraft(lastUserMessage.content)}
                   disabled={!lastUserMessage}
-                  className="grid size-9 place-items-center rounded-md border border-stone-300 text-stone-700 transition hover:bg-stone-100 disabled:opacity-50"
                   title="Retry last request"
                   aria-label="Retry last request"
                 >
                   <RotateCcw size={16} />
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
+                  variant="outline"
+                  size="icon"
                   onClick={() => exportChat.mutate()}
                   disabled={!props.activeProjectId || !messages.length || exportChat.isPending}
-                  className="grid size-9 place-items-center rounded-md border border-stone-300 text-stone-700 transition hover:bg-stone-100 disabled:opacity-50"
                   title="Export conversation"
                   aria-label="Export conversation"
                 >
                   <Download size={16} />
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
+                  variant="destructive"
+                  size="icon"
                   onClick={() => {
                     if (window.confirm("Clear this conversation? Project files and papers will remain.")) clearChat.mutate();
                   }}
                   disabled={!props.activeProjectId || !messages.length || clearChat.isPending}
-                  className="grid size-9 place-items-center rounded-md border border-[#e9b4c1] text-[#7b2d43] transition hover:bg-[#f3d4dc] disabled:opacity-50"
                   title="Clear conversation"
                   aria-label="Clear conversation"
                 >
                   <Trash2 size={16} />
-                </button>
+                </Button>
               </div>
-              <button
+              <Button
                 type="submit"
                 disabled={!draft.trim() || sendChat.isPending}
-                className="inline-flex h-9 items-center gap-2 rounded-md bg-[#175c62] px-4 text-sm font-medium text-white transition hover:bg-[#11494e] disabled:opacity-50"
               >
                 {sendChat.isPending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
                 Send
-              </button>
+              </Button>
             </div>
-          </div>
+          </Card>
         </div>
       </form>
     </section>
@@ -209,9 +216,10 @@ function MessageBubble({ message }: { message: Message }): JSX.Element {
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
       <div
-        className={`max-w-[78%] rounded-md px-4 py-3 text-sm leading-6 shadow-sm ${
-          isUser ? "bg-[#175c62] text-white" : "border border-stone-200 bg-white text-stone-800"
-        }`}
+        className={cn(
+          "max-w-[78%] rounded-lg px-4 py-3 text-sm leading-6 shadow-sm",
+          isUser ? "bg-primary text-primary-foreground" : "border border-border bg-card text-card-foreground"
+        )}
       >
         <MarkdownMessage content={message.content} isUser={isUser} />
       </div>
@@ -222,7 +230,7 @@ function MessageBubble({ message }: { message: Message }): JSX.Element {
 function ThinkingBubble(): JSX.Element {
   return (
     <div className="flex justify-start">
-      <div className="inline-flex items-center gap-2 rounded-md border border-stone-200 bg-white px-4 py-3 text-sm text-stone-600 shadow-sm">
+      <div className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-3 text-sm text-muted-foreground shadow-sm">
         <Loader2 size={16} className="animate-spin" />
         Working through the project tools
       </div>

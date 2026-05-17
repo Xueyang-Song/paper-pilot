@@ -1,5 +1,4 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { motion } from "framer-motion";
 import { ChevronDown, ChevronUp, Download, ExternalLink, FileText, FolderOpen, Loader2, Pencil, RefreshCw, Save, Search, Star, Trash2, X } from "lucide-react";
 import type { JSX } from "react";
 import { useEffect, useMemo, useState } from "react";
@@ -9,6 +8,14 @@ import { ArtifactIcon, base64ToBlob, buildArtifactRows, formatBytes, formatJson 
 import { ArtifactScoreControl, ScoreChip } from "./artifact-panel";
 import { PdfArtifactPreview } from "./pdf-artifact-preview";
 import { IconButton, MarkdownMessage } from "./ui";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 
 export function ArtifactViewerModal({
   projectId,
@@ -166,23 +173,23 @@ export function ArtifactViewerModal({
   }
   if (!selectedArtifact) return null;
   return (
-    <div className="fixed inset-0 z-50 bg-stone-950/55 p-5">
-      <motion.div
-        initial={{ opacity: 0, scale: 0.985, y: 12 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        className="mx-auto grid h-full max-h-[980px] w-full max-w-[1500px] grid-cols-[300px_minmax(0,1fr)] overflow-hidden rounded-md border border-stone-300 bg-[#fbfaf6] shadow-2xl"
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent
+        className="grid h-[calc(100dvh-2rem)] max-h-[980px] !w-[calc(100vw-2rem)] !max-w-[1500px] grid-cols-[300px_minmax(0,1fr)] gap-0 overflow-hidden border-border bg-popover p-0 shadow-2xl"
+        showCloseButton={false}
       >
-        <aside className="flex min-h-0 flex-col border-r border-stone-200 bg-[#ede7dc]">
-          <div className="flex h-16 items-center justify-between border-b border-stone-300 px-4">
+        <aside className="flex min-h-0 flex-col border-r border-border bg-sidebar text-sidebar-foreground">
+          <div className="flex h-16 items-center justify-between border-b border-sidebar-border px-4">
             <div>
               <div className="text-sm font-semibold">Files</div>
-              <div className="text-xs text-stone-600">{artifactRows.length} artifacts</div>
+              <div className="text-xs text-muted-foreground">{artifactRows.length} artifacts</div>
             </div>
             <IconButton label="Close viewer" onClick={onClose}>
               <X size={18} />
             </IconButton>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto p-3">
+          <ScrollArea className="min-h-0 flex-1">
+          <div className="p-3">
             <div className="space-y-1">
               {artifactRows.map(({ artifact, scoreTarget, sourceLabel }) => {
                 const selected = artifact.id === selectedArtifact.id;
@@ -191,16 +198,17 @@ export function ArtifactViewerModal({
                     key={artifact.id}
                     type="button"
                     onClick={() => onSelect(artifact.id)}
-                    className={`flex w-full items-start gap-3 rounded-md px-3 py-2 text-left transition ${
-                      selected ? "bg-stone-950 text-[#f4efe6]" : "text-stone-800 hover:bg-white/70"
-                    }`}
+                    className={cn(
+                      "flex w-full items-start gap-3 rounded-lg px-3 py-2 text-left transition",
+                      selected ? "bg-primary text-primary-foreground" : "text-sidebar-foreground hover:bg-sidebar-accent"
+                    )}
                   >
-                    <ArtifactIcon artifact={artifact} className={`mt-0.5 shrink-0 ${selected ? "text-[#f4efe6]" : "text-[#7b2d43]"}`} />
+                    <ArtifactIcon artifact={artifact} className={cn("mt-0.5 shrink-0", selected ? "text-primary-foreground" : "text-primary")} />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-medium">{artifact.title}</span>
-                      <span className={`mt-0.5 block truncate text-xs ${selected ? "text-stone-300" : "text-stone-600"}`}>
+                      <span className={cn("mt-0.5 block truncate text-xs", selected ? "text-primary-foreground/70" : "text-muted-foreground")}>
                         {artifact.type}
-                        {sourceLabel ? ` | From ${sourceLabel}` : ""}
+                        {sourceLabel ? ` / From ${sourceLabel}` : ""}
                       </span>
                     </span>
                     {scoreTarget ? <ScoreChip score={scoreTarget.score} /> : null}
@@ -209,16 +217,17 @@ export function ArtifactViewerModal({
               })}
             </div>
           </div>
+          </ScrollArea>
         </aside>
         <section className="flex min-h-0 min-w-0 flex-col">
-          <header className="flex h-16 shrink-0 items-center justify-between gap-4 border-b border-stone-200 bg-white px-5">
+          <header className="flex h-16 shrink-0 items-center justify-between gap-4 border-b border-border bg-card px-5">
             <div className="min-w-0">
               {editingTitle ? (
                 <div className="flex min-w-0 items-center gap-2">
-                  <input
+                  <Input
                     value={draftTitle}
                     onChange={(event) => setDraftTitle(event.target.value)}
-                    className="h-8 min-w-0 flex-1 rounded-md border border-stone-300 px-2 text-sm font-semibold outline-none focus:border-[#175c62]"
+                    className="h-8 min-w-0 flex-1 text-sm font-semibold"
                     maxLength={180}
                   />
                   <HeaderButton label="Save title" onClick={() => renameArtifact.mutate()} disabled={renameArtifact.isPending}>
@@ -233,7 +242,7 @@ export function ArtifactViewerModal({
                   </HeaderButton>
                 </div>
               )}
-              <div className="mt-0.5 flex gap-3 text-xs text-stone-600">
+              <div className="mt-0.5 flex gap-3 text-xs text-muted-foreground">
                 <span>{selectedArtifact.type}</span>
                 {selectedRow.sourceLabel ? <span>From {selectedRow.sourceLabel}</span> : null}
                 <span>{selectedArtifact.mime}</span>
@@ -245,51 +254,58 @@ export function ArtifactViewerModal({
                 <Search size={18} />
               </IconButton>
               {highlightQuery.trim() ? (
-                <div className="inline-flex h-8 items-center overflow-hidden rounded-md border border-stone-300 bg-white">
-                  <button
+                <div className="inline-flex h-8 items-center overflow-hidden rounded-lg border border-border bg-background">
+                  <Button
                     type="button"
+                    variant="ghost"
+                    size="icon"
                     title="Previous hit"
                     aria-label="Previous hit"
                     onClick={() => goToHit(-1)}
                     disabled={!hitCount}
-                    className="grid size-8 place-items-center text-stone-700 transition hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="rounded-none"
                   >
                     <ChevronUp size={15} />
-                  </button>
-                  <div className="min-w-14 border-x border-stone-200 px-2 text-center text-[11px] font-medium tabular-nums text-stone-600">
+                  </Button>
+                  <div className="min-w-14 border-x border-border px-2 text-center text-[11px] font-medium tabular-nums text-muted-foreground">
                     {hitCount ? `${activeHitIndex + 1}/${hitCount}` : "0/0"}
                   </div>
-                  <button
+                  <Button
                     type="button"
+                    variant="ghost"
+                    size="icon"
                     title="Next hit"
                     aria-label="Next hit"
                     onClick={() => goToHit(1)}
                     disabled={!hitCount}
-                    className="grid size-8 place-items-center text-stone-700 transition hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="rounded-none"
                   >
                     <ChevronDown size={15} />
-                  </button>
+                  </Button>
                 </div>
               ) : null}
               {highlightQuery.trim() ? (
-                <button
+                <Button
                   type="button"
+                  variant="secondary"
+                  size="sm"
                   onClick={onClearHighlight}
-                  className="inline-flex h-8 max-w-56 items-center gap-2 rounded-md border border-[#d2b05f] bg-[#fbf0c9] px-3 text-xs font-medium text-[#77581b] transition hover:border-[#9d7a2a]"
+                  className="max-w-56"
                 >
                   <Search size={13} />
                   <span className="truncate">{highlightQuery}</span>
                   <X size={12} />
-                </button>
+                </Button>
               ) : null}
-              <button
+              <Button
                 type="button"
+                variant="outline"
+                size="sm"
                 onClick={() => revealArtifactLocation(projectId, selectedArtifact.id)}
-                className="inline-flex h-8 items-center gap-2 rounded-md border border-stone-300 bg-white px-3 text-xs font-medium text-stone-700 transition hover:border-[#175c62] hover:text-[#175c62]"
               >
                 <FolderOpen size={13} />
                 Show in folder
-              </button>
+              </Button>
               <HeaderButton label="Open original source" onClick={() => openSource.mutate()} disabled={openSource.isPending}>
                 <ExternalLink size={13} />
               </HeaderButton>
@@ -313,7 +329,7 @@ export function ArtifactViewerModal({
             </div>
           </header>
           {selectedPaper ? (
-            <div className="shrink-0 border-b border-stone-200 bg-[#fbfaf6] px-5 py-2">
+            <div className="shrink-0 border-b border-border bg-background px-5 py-2">
               <div className="flex flex-wrap items-center gap-2">
                 <HeaderButton
                   label={selectedPaper.favorite ? "Remove favorite" : "Favorite paper"}
@@ -322,30 +338,34 @@ export function ArtifactViewerModal({
                 >
                   <Star size={13} />
                 </HeaderButton>
-                <select
+                <Select
                   value={selectedPaper.userStatus ?? "unread"}
-                  onChange={(event) => updatePaper.mutate({ userStatus: event.target.value as Paper["userStatus"] })}
-                  className="h-8 rounded-md border border-stone-300 bg-white px-2 text-xs text-stone-700 outline-none focus:border-[#175c62]"
+                  onValueChange={(value) => updatePaper.mutate({ userStatus: value as Paper["userStatus"] })}
                 >
-                  <option value="unread">Unread</option>
-                  <option value="to-read">To read</option>
-                  <option value="reading">Reading</option>
-                  <option value="read">Read</option>
-                  <option value="rejected">Rejected</option>
-                </select>
-                <input
+                  <SelectTrigger className="h-8 w-32">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="unread">Unread</SelectItem>
+                    <SelectItem value="to-read">To read</SelectItem>
+                    <SelectItem value="reading">Reading</SelectItem>
+                    <SelectItem value="read">Read</SelectItem>
+                    <SelectItem value="rejected">Rejected</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Input
                   value={draftTags}
                   onChange={(event) => setDraftTags(event.target.value)}
                   onBlur={() => updatePaper.mutate({ tags: splitTags(draftTags) })}
                   placeholder="Tags"
-                  className="h-8 min-w-32 rounded-md border border-stone-300 bg-white px-2 text-xs outline-none focus:border-[#175c62]"
+                  className="h-8 min-w-32 text-xs"
                 />
-                <input
+                <Input
                   value={draftNotes}
                   onChange={(event) => setDraftNotes(event.target.value)}
                   onBlur={() => updatePaper.mutate({ notes: draftNotes.trim() })}
                   placeholder="Notes"
-                  className="h-8 min-w-0 flex-1 rounded-md border border-stone-300 bg-white px-2 text-xs outline-none focus:border-[#175c62]"
+                  className="h-8 min-w-0 flex-1 text-xs"
                 />
                 <HeaderButton label="Export citation" onClick={() => exportCitation.mutate()} disabled={exportCitation.isPending}>
                   <FileText size={13} />
@@ -392,7 +412,7 @@ export function ArtifactViewerModal({
               </div>
             </div>
           ) : null}
-          <div className="min-h-0 flex-1 overflow-hidden bg-[#f7f4ee]">
+          <div className="min-h-0 flex-1 overflow-hidden bg-muted/35">
             <ArtifactPreview
               artifact={selectedArtifact}
               data={contentQuery.data}
@@ -406,8 +426,8 @@ export function ArtifactViewerModal({
             />
           </div>
         </section>
-      </motion.div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 function ArtifactPreview({
@@ -447,7 +467,7 @@ function ArtifactPreview({
   if (isLoading) {
     return (
       <div className="grid h-full place-items-center">
-        <div className="inline-flex items-center gap-2 rounded-md border border-stone-200 bg-white px-4 py-3 text-sm text-stone-600 shadow-sm">
+        <div className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-3 text-sm text-muted-foreground shadow-sm">
           <Loader2 size={16} className="animate-spin" />
           Loading artifact
         </div>
@@ -457,9 +477,9 @@ function ArtifactPreview({
   if (error) {
     return (
       <div className="grid h-full place-items-center p-8">
-        <div className="max-w-xl rounded-md border border-[#e9b4c1] bg-white p-5 text-sm text-[#7b2d43] shadow-sm">
-          Could not open this artifact. {error.message}
-        </div>
+        <Alert variant="destructive" className="max-w-xl">
+          <AlertDescription>Could not open this artifact. {error.message}</AlertDescription>
+        </Alert>
       </div>
     );
   }
@@ -480,7 +500,7 @@ function ArtifactPreview({
     }
     return (
       <div className="grid h-full place-items-center p-8">
-        <div className="rounded-md border border-stone-200 bg-white p-5 text-sm text-stone-600 shadow-sm">
+        <div className="rounded-lg border border-border bg-card p-5 text-sm text-muted-foreground shadow-sm">
           Binary preview is not available for this file type.
         </div>
       </div>
@@ -489,7 +509,7 @@ function ArtifactPreview({
   if (data.truncated) {
     return (
       <div className="flex h-full min-h-0 flex-col">
-        <div className="shrink-0 border-b border-amber-200 bg-amber-50 px-5 py-2 text-xs text-amber-900">
+        <div className="shrink-0 border-b border-chart-4/40 bg-chart-4/10 px-5 py-2 text-xs text-chart-4">
           Preview is truncated at 2 MB for responsiveness.
         </div>
         <TextArtifactPreview
@@ -548,9 +568,9 @@ function TextArtifactPreview({
   if (artifact.type === "markdown" || artifact.type === "brief") {
     return (
       <div className="h-full overflow-y-auto px-8 py-7">
-        <article className="mx-auto max-w-4xl rounded-md border border-stone-200 bg-white px-7 py-6 shadow-sm">
+        <Card className="mx-auto max-w-4xl rounded-lg border-border bg-card px-7 py-6 shadow-sm">
           <MarkdownMessage content={content} isUser={false} />
-        </article>
+        </Card>
       </div>
     );
   }
@@ -575,7 +595,7 @@ function CodeViewer({
   onHitCountChange(hitCount: number): void;
 }): JSX.Element {
   return (
-    <div className="h-full overflow-auto bg-[#171412] p-5 text-[#f8f3e8]">
+    <div className="h-full overflow-auto bg-[oklch(0.13_0.015_248)] p-5 text-slate-100">
       <pre className="m-0 min-w-full whitespace-pre-wrap break-words font-mono text-xs leading-5">
         <HighlightedText
           value={content}
@@ -616,22 +636,18 @@ function HeaderButton({
   children: JSX.Element;
 }): JSX.Element {
   return (
-    <button
+    <Button
       type="button"
       title={label}
       aria-label={label}
       onClick={onClick}
       disabled={disabled}
-      className={`grid size-8 shrink-0 place-items-center rounded-md border transition disabled:cursor-not-allowed disabled:opacity-45 ${
-        active
-          ? "border-[#d2b05f] bg-[#fbf0c9] text-[#77581b]"
-          : danger
-            ? "border-[#e9b4c1] bg-white text-[#7b2d43] hover:border-[#7b2d43]"
-            : "border-stone-300 bg-white text-stone-700 hover:border-[#175c62] hover:text-[#175c62]"
-      }`}
+      variant={danger ? "destructive" : active ? "secondary" : "outline"}
+      size="icon"
+      className={cn("shrink-0", active && "text-chart-4")}
     >
       {children}
-    </button>
+    </Button>
   );
 }
 
@@ -648,12 +664,12 @@ function PaperField({
 }): JSX.Element {
   return (
     <label className="min-w-0">
-      <span className="mb-1 block text-[10px] font-medium uppercase tracking-[0.12em] text-stone-500">{label}</span>
-      <input
+      <span className="mb-1 block text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">{label}</span>
+      <Input
         value={value}
         onChange={(event) => onChange(event.target.value)}
         onBlur={onCommit}
-        className="h-8 w-full rounded-md border border-stone-300 bg-white px-2 text-xs outline-none focus:border-[#175c62]"
+        className="h-8 w-full text-xs"
       />
     </label>
   );

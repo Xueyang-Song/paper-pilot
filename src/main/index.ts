@@ -21,7 +21,7 @@ import { SettingsService } from "./services/settings-service.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const { app, BrowserWindow, shell } = electron;
+const { app, BrowserWindow, Menu, shell } = electron;
 
 let mainWindow: BrowserWindowType | undefined;
 
@@ -32,7 +32,10 @@ function createWindow(): BrowserWindowType {
     minWidth: 1100,
     minHeight: 760,
     title: "Paper Pilot",
-    backgroundColor: "#f6f2ea",
+    titleBarStyle: "hidden",
+    ...(process.platform !== "darwin" ? { titleBarOverlay: titleBarOverlayOptions("dark") } : {}),
+    autoHideMenuBar: true,
+    backgroundColor: "#0f141c",
     show: false,
     webPreferences: {
       preload: join(__dirname, "../preload/index.js"),
@@ -42,7 +45,11 @@ function createWindow(): BrowserWindowType {
     }
   });
 
-  window.once("ready-to-show", () => window.show());
+  wireWindowStateEvents(window);
+  window.once("ready-to-show", () => {
+    window.show();
+    emitWindowState(window);
+  });
   window.webContents.setWindowOpenHandler(({ url }) => {
     void shell.openExternal(url);
     return { action: "deny" };
@@ -57,7 +64,36 @@ function createWindow(): BrowserWindowType {
   return window;
 }
 
+function wireWindowStateEvents(window: BrowserWindowType): void {
+  window.on("maximize", () => emitWindowState(window));
+  window.on("unmaximize", () => emitWindowState(window));
+  window.on("restore", () => emitWindowState(window));
+  window.on("focus", () => emitWindowState(window));
+  window.on("blur", () => emitWindowState(window));
+  window.on("enter-full-screen", () => emitWindowState(window));
+  window.on("leave-full-screen", () => emitWindowState(window));
+}
+
+function emitWindowState(window: BrowserWindowType): void {
+  if (window.isDestroyed()) return;
+  window.webContents.send("window:state-changed", {
+    isMaximized: window.isMaximized(),
+    isFocused: window.isFocused(),
+    isFullScreen: window.isFullScreen()
+  });
+}
+
+export function titleBarOverlayOptions(theme: "light" | "dark"): Electron.TitleBarOverlay {
+  return {
+    color: "#00000000",
+    symbolColor: theme === "dark" ? "#d8e3eaff" : "#17212bff",
+    height: 44
+  };
+}
+
 app.whenReady().then(() => {
+  Menu.setApplicationMenu(null);
+
   const dataRoot = app.getPath("userData");
   const db = new PaperPilotDb(join(dataRoot, "paper-pilot.db"));
   const registry = new SourceRegistry();

@@ -19,6 +19,7 @@ describe("shared schemas", () => {
       ai: { provider: "ollama", baseUrl: "http://127.0.0.1:11434", model: "gemma3:12b-it-qat" },
       python: { runtimeMode: "managed" }
     });
+    expect(settings.ui.theme).toBe("system");
     expect(settings.sources.disabledSourceIds).toEqual([]);
   });
 });

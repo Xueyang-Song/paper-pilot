@@ -7,7 +7,7 @@ export function HighlightedSnippet({ value, query }: { value: string; query: str
       <>
         {segments.map((segment, index) =>
           segment.match ? (
-            <mark key={`${segment.text}-${index}`} className="rounded bg-[#fbf0c9] px-0.5 text-[#77581b]">
+            <mark key={`${segment.text}-${index}`} className="rounded bg-accent px-0.5 text-accent-foreground">
               {segment.text}
             </mark>
           ) : (
@@ -66,11 +66,11 @@ export function HighlightedText({
             className={`rounded px-0.5 ${
               active
                 ? tone === "dark"
-                  ? "bg-[#d8eadf] text-[#0f3f43] ring-2 ring-[#7fb0aa]"
-                  : "bg-[#d8eadf] text-[#175c62] ring-2 ring-[#7fb0aa]"
+                  ? "bg-primary text-primary-foreground ring-2 ring-primary/50"
+                  : "bg-primary text-primary-foreground ring-2 ring-primary/35"
                 : tone === "dark"
-                  ? "bg-[#fbf0c9] text-[#171412]"
-                  : "bg-[#fbf0c9] text-[#77581b]"
+                  ? "bg-accent text-accent-foreground"
+                  : "bg-accent text-accent-foreground"
             }`}
           >
             {segment.text}

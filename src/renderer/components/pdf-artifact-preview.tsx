@@ -6,6 +6,8 @@ import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
 import type { Artifact } from "../../shared/schemas";
 import { buildHighlightTokens, clamp, countOccurrences } from "../lib/highlight";
 import { base64ToBytes } from "./artifact-helpers";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { cn } from "@/lib/utils";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 interface PdfDocumentLike {
@@ -188,7 +190,7 @@ export function PdfArtifactPreview({
   if (loading) {
     return (
       <div className="grid h-full place-items-center">
-        <div className="inline-flex items-center gap-2 rounded-md border border-stone-200 bg-white px-4 py-3 text-sm text-stone-600 shadow-sm">
+        <div className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-3 text-sm text-muted-foreground shadow-sm">
           <Loader2 size={16} className="animate-spin" />
           Loading PDF
         </div>
@@ -198,17 +200,17 @@ export function PdfArtifactPreview({
   if (error) {
     return (
       <div className="grid h-full place-items-center p-8">
-        <div className="max-w-xl rounded-md border border-[#e9b4c1] bg-white p-5 text-sm text-[#7b2d43] shadow-sm">
-          Could not render this PDF. {error}
-        </div>
+        <Alert variant="destructive" className="max-w-xl">
+          <AlertDescription>Could not render this PDF. {error}</AlertDescription>
+        </Alert>
       </div>
     );
   }
   return (
-    <div className="flex h-full min-h-0 flex-col bg-[#d8d2c7]">
-      <div className="flex h-11 shrink-0 items-center justify-between border-b border-stone-300 bg-white px-4 text-xs text-stone-600">
+    <div className="flex h-full min-h-0 flex-col bg-muted/55">
+      <div className="flex h-11 shrink-0 items-center justify-between border-b border-border bg-card px-4 text-xs text-muted-foreground">
         <div className="flex min-w-0 items-center gap-3">
-          <span className="font-medium text-stone-800">{pdf?.numPages ?? 0} pages</span>
+          <span className="font-medium text-foreground">{pdf?.numPages ?? 0} pages</span>
           {highlightQuery.trim() ? (
             <span className="truncate">
               {scanning
@@ -219,7 +221,7 @@ export function PdfArtifactPreview({
             </span>
           ) : null}
         </div>
-        {scanning ? <Loader2 size={14} className="animate-spin text-[#175c62]" /> : null}
+        {scanning ? <Loader2 size={14} className="animate-spin text-primary" /> : null}
       </div>
       <div ref={containerRef} className="min-h-0 flex-1 overflow-auto px-6 py-5">
         <div className="mx-auto flex max-w-[980px] flex-col gap-5">
@@ -231,11 +233,12 @@ export function PdfArtifactPreview({
                 ref={(node) => {
                   pageRefs.current[pageNumber] = node;
                 }}
-                className={`rounded-md border bg-white p-3 shadow-xl ${
-                  hitPages.includes(pageNumber) ? "border-[#175c62] ring-2 ring-[#7fb0aa]" : "border-stone-300"
-                }`}
+                className={cn(
+                  "rounded-lg border bg-card p-3 shadow-xl",
+                  hitPages.includes(pageNumber) ? "border-primary ring-2 ring-primary/35" : "border-border"
+                )}
               >
-                <div className="mb-2 text-xs font-medium text-stone-500">Page {pageNumber}</div>
+                <div className="mb-2 text-xs font-medium text-muted-foreground">Page {pageNumber}</div>
                 {pdf ? (
                   <PdfPageCanvas
                     pdf={pdf}
@@ -336,7 +339,7 @@ function PdfPageCanvas({
   return (
     <div className="relative min-h-40">
       {rendering ? (
-        <div className="absolute inset-0 z-10 grid place-items-center bg-white/75 text-xs text-stone-500">
+        <div className="absolute inset-0 z-10 grid place-items-center bg-card/75 text-xs text-muted-foreground">
           <Loader2 size={15} className="animate-spin" />
         </div>
       ) : null}

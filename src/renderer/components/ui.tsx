@@ -1,6 +1,10 @@
 import type { JSX, ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Switch } from "@/components/ui/switch";
 
 export function MarkdownMessage({ content, isUser }: { content: string; isUser: boolean }): JSX.Element {
   return (
@@ -19,9 +23,9 @@ export function MarkdownMessage({ content, isUser }: { content: string; isUser: 
 
 export function PolicyToggle({ label, checked, onChange }: { label: string; checked: boolean; onChange(checked: boolean): void }): JSX.Element {
   return (
-    <label className="mt-3 flex items-center justify-between rounded-md border border-stone-200 bg-white px-3 py-2 text-sm">
-      {label}
-      <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} className="size-4 accent-[#175c62]" />
+    <label className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-3 py-2 text-sm">
+      <span>{label}</span>
+      <Switch checked={checked} onCheckedChange={onChange} />
     </label>
   );
 }
@@ -29,46 +33,47 @@ export function PolicyToggle({ label, checked, onChange }: { label: string; chec
 export function PanelSection({ icon, title, children }: { icon: JSX.Element; title: string; children: ReactNode }): JSX.Element {
   return (
     <section className="mb-5">
-      <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
+      <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
         {icon}
         {title}
       </div>
-      <div className="space-y-3">{children}</div>
+      <div className="flex flex-col gap-3">{children}</div>
     </section>
   );
 }
 
 export function Metric({ label, value }: { label: string; value: number }): JSX.Element {
   return (
-    <div className="rounded-md border border-stone-200 bg-white p-3">
-      <div className="text-xl font-semibold">{value}</div>
-      <div className="text-xs text-stone-600">{label}</div>
-    </div>
+    <Card className="min-w-0 rounded-lg">
+      <CardContent className="min-w-0 p-3">
+        <div className="text-xl font-semibold text-foreground">{value}</div>
+        <div className="text-xs text-muted-foreground">{label}</div>
+      </CardContent>
+    </Card>
   );
 }
 
 export function StatusPill({ icon, label, title }: { icon: JSX.Element; label: string; title?: string }): JSX.Element {
   return (
-    <div
-      title={title}
-      className="hidden h-8 max-w-[360px] items-center gap-2 rounded-md border border-stone-300 bg-white px-3 text-xs text-stone-700 lg:inline-flex"
-    >
+    <Badge title={title} variant="outline" className="hidden h-8 max-w-[360px] gap-2 rounded-lg bg-card px-3 text-xs text-muted-foreground lg:inline-flex">
       {icon}
       <span className="truncate">{label}</span>
-    </div>
+    </Badge>
   );
 }
 
 export function IconButton({ label, onClick, children }: { label: string; onClick(): void; children: ReactNode }): JSX.Element {
   return (
-    <button
+    <Button
       type="button"
+      variant="outline"
+      size="icon-lg"
       title={label}
       aria-label={label}
       onClick={onClick}
-      className="grid size-9 place-items-center rounded-md border border-stone-300 bg-white text-stone-700 transition hover:border-stone-500 hover:bg-stone-100"
+      className="window-no-drag"
     >
       {children}
-    </button>
+    </Button>
   );
 }

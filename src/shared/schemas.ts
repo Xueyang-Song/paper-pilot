@@ -255,6 +255,11 @@ export const jobSchema = z.object({
 export type Job = z.infer<typeof jobSchema>;
 
 export const appSettingsSchema = z.object({
+  ui: z
+    .object({
+      theme: z.enum(["system", "light", "dark"]).default("system")
+    })
+    .default({ theme: "system" }),
   ai: z.object({
     provider: z.enum(["ollama", "vercel", "openai-compatible"]).default("ollama"),
     baseUrl: z.string().url().default("http://127.0.0.1:11434"),

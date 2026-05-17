@@ -1,4 +1,5 @@
 import electron from "electron";
+import type { BrowserWindow as BrowserWindowType, IpcMainInvokeEvent } from "electron";
 import { readFile, rm, stat, writeFile } from "node:fs/promises";
 import { basename, extname } from "node:path";
 import { z } from "zod";
@@ -52,6 +53,36 @@ export interface IpcServices {
 }
 
 export function registerIpc(services: IpcServices): void {
+  ipcMain.handle("window:platform", () => process.platform);
+
+  ipcMain.handle("window:minimize", (event) => {
+    const window = windowFromEvent(event);
+    window.minimize();
+  });
+
+  ipcMain.handle("window:toggleMaximize", (event) => {
+    const window = windowFromEvent(event);
+    if (window.isMaximized()) window.unmaximize();
+    else window.maximize();
+    const state = getWindowState(window);
+    window.webContents.send("window:state-changed", state);
+    return { isMaximized: state.isMaximized };
+  });
+
+  ipcMain.handle("window:close", (event) => {
+    windowFromEvent(event).close();
+  });
+
+  ipcMain.handle("window:getState", (event) => getWindowState(windowFromEvent(event)));
+
+  ipcMain.handle("window:setTitleBarTheme", (event, input: unknown) => {
+    const theme = z.enum(["light", "dark"]).parse(input);
+    const window = windowFromEvent(event);
+    if (process.platform !== "darwin") {
+      window.setTitleBarOverlay(titleBarOverlayOptions(theme));
+    }
+  });
+
   ipcMain.handle("projects:list", () => services.db.listProjects());
 
   ipcMain.handle("projects:getBundle", (_event, projectId: unknown) => {
@@ -413,6 +444,34 @@ export function registerIpc(services: IpcServices): void {
       window.webContents.send("jobs:changed", job);
     }
   });
+}
+
+interface WindowState {
+  isMaximized: boolean;
+  isFocused: boolean;
+  isFullScreen: boolean;
+}
+
+function windowFromEvent(event: IpcMainInvokeEvent): BrowserWindowType {
+  const window = BrowserWindow.fromWebContents(event.sender);
+  if (!window) throw new Error("No active window is associated with this request.");
+  return window;
+}
+
+function getWindowState(window: BrowserWindowType): WindowState {
+  return {
+    isMaximized: window.isMaximized(),
+    isFocused: window.isFocused(),
+    isFullScreen: window.isFullScreen()
+  };
+}
+
+function titleBarOverlayOptions(theme: "light" | "dark") {
+  return {
+    color: "#00000000",
+    symbolColor: theme === "dark" ? "#d8e3eaff" : "#17212bff",
+    height: 44
+  };
 }
 
 interface ProjectExportBundle {
