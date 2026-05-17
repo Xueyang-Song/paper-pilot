@@ -90,14 +90,14 @@ export function SearchPanel({
           </DialogDescription>
         </DialogHeader>
         <div className="shrink-0 border-b border-border bg-card/60 p-4">
-          <div className="flex items-center gap-2 rounded-lg border border-input bg-background px-3 focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/25">
+          <div className="flex items-center gap-2 rounded-lg border border-input bg-input/30 px-3 focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/25">
             <Search size={17} className="shrink-0 text-muted-foreground" />
             <Input
               ref={inputRef}
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search papers, PDFs, notes, JSON, and briefs"
-              className="h-11 min-w-0 flex-1 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
+              className="h-11 min-w-0 flex-1 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0 dark:bg-transparent"
             />
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
