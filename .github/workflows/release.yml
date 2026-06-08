@@ -94,6 +94,17 @@ jobs:
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
+      - name: Export Azure federated token for signing
+        shell: pwsh
+        run: |
+          $tokenResponse = Invoke-RestMethod `
+            -Uri "$env:ACTIONS_ID_TOKEN_REQUEST_URL&audience=api://AzureADTokenExchange" `
+            -Headers @{ Authorization = "Bearer $env:ACTIONS_ID_TOKEN_REQUEST_TOKEN" }
+
+          $tokenPath = Join-Path $env:RUNNER_TEMP "azure-federated-token"
+          $tokenResponse.value | Set-Content -Path $tokenPath -NoNewline -Encoding ascii
+          "AZURE_FEDERATED_TOKEN_FILE=$tokenPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
       - name: Build signed Windows installer
         run: npm run package -- --win --x64 --publish never
 
