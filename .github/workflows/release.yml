@@ -9,53 +9,157 @@ on:
       tag:
         description: 'Tag to release (e.g. v0.2.0)'
         required: true
+        type: string
 
 permissions:
-  contents: write
+  contents: read
+
+env:
+  NODE_VERSION: '22.18.0'
+  RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
 
 jobs:
-  build:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: macos-latest
-            platform: mac
-            artifact_glob: 'release/*.dmg'
-          - os: windows-latest
-            platform: win
-            artifact_glob: 'release/*.exe'
-          - os: ubuntu-latest
-            platform: linux
-            artifact_glob: 'release/*.AppImage'
-
-    runs-on: ${{ matrix.os }}
-    name: Build (${{ matrix.platform }})
+  verify:
+    runs-on: windows-latest
+    name: Verify
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Build & package
-        run: npm run package -- --${{ matrix.platform }}
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Verify
+        run: npm run verify
 
-      - name: Upload release artifacts
-        uses: softprops/action-gh-release@v2
+  build-windows-signed:
+    runs-on: windows-latest
+    name: Build signed Windows installer
+    needs: verify
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+
+    env:
+      AZURE_SIGNING_ENABLED: '1'
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      AZURE_SIGNING_ENDPOINT: ${{ vars.AZURE_SIGNING_ENDPOINT }}
+      AZURE_SIGNING_ACCOUNT_NAME: ${{ vars.AZURE_SIGNING_ACCOUNT_NAME }}
+      AZURE_SIGNING_CERTIFICATE_PROFILE_NAME: ${{ vars.AZURE_SIGNING_CERTIFICATE_PROFILE_NAME }}
+      AZURE_SIGNING_PUBLISHER_NAME: ${{ vars.AZURE_SIGNING_PUBLISHER_NAME }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
-          tag_name: ${{ github.ref_name || inputs.tag }}
-          draft: false
-          generate_release_notes: true
-          files: ${{ matrix.artifact_glob }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Build signed Windows installer
+        run: npm run package -- --win --x64 --publish never
+
+      - name: Verify Authenticode signatures
+        shell: pwsh
+        run: |
+          $installerFiles = Get-ChildItem -Path release -File -Filter *.exe
+          $appFiles = Get-ChildItem -Path release\win-unpacked -File -Filter *.exe -Recurse
+          $targets = @($installerFiles) + @($appFiles)
+
+          if ($targets.Count -eq 0) {
+            throw "No executable files were produced for signature verification."
+          }
+
+          foreach ($target in $targets) {
+            $signature = Get-AuthenticodeSignature -FilePath $target.FullName
+            Write-Host "$($target.FullName): $($signature.Status)"
+
+            if ($signature.Status -ne "Valid") {
+              throw "Invalid Authenticode signature for $($target.FullName): $($signature.StatusMessage)"
+            }
+          }
+
+      - name: Generate checksums
+        shell: pwsh
+        run: |
+          $installerFiles = Get-ChildItem -Path release -File -Filter *.exe | Sort-Object Name
+
+          if ($installerFiles.Count -eq 0) {
+            throw "No installer executables were produced for checksum generation."
+          }
+
+          $checksums = foreach ($installer in $installerFiles) {
+            $hash = Get-FileHash -Path $installer.FullName -Algorithm SHA256
+            "$($hash.Hash.ToLowerInvariant())  $($installer.Name)"
+          }
+
+          $checksums | Set-Content -Path release\SHA256SUMS.txt -Encoding ascii
+
+      - name: Upload signed release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: paper-pilot-windows-signed
+          path: |
+            release/*.exe
+            release/SHA256SUMS.txt
+          if-no-files-found: error
+
+  publish-release:
+    runs-on: ubuntu-latest
+    name: Publish GitHub release
+    needs: build-windows-signed
+    permissions:
+      contents: write
+
+    env:
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - name: Download signed release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+
+      - name: Publish release
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mapfile -d '' files < <(find release-artifacts -type f \( -name '*.exe' -o -name 'SHA256SUMS.txt' \) -print0 | sort -z)
+
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "No release files were downloaded." >&2
+            exit 1
+          fi
+
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "${files[@]}" --clobber
+          else
+            gh release create "$RELEASE_TAG" "${files[@]}" --verify-tag --title "$RELEASE_TAG" --generate-notes
+          fi

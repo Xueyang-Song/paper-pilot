@@ -17,32 +17,7 @@
     "test:crawlers:api": "cross-env PAPER_PILOT_LIVE_CRAWLER_SMOKE=1 vitest run tests/crawler-smoke.test.ts --testTimeout=120000",
     "test:crawlers:browser": "cross-env PAPER_PILOT_BROWSER_SMOKE=1 vitest run tests/crawler-smoke.test.ts --testTimeout=240000",
     "start": "electron .",
-    "package": "npm run build && electron-builder"
-  },
-  "build": {
-    "appId": "science.paperpilot.app",
-    "productName": "Paper Pilot",
-    "npmRebuild": false,
-    "directories": {
-      "output": "release"
-    },
-    "files": [
-      "dist/**/*",
-      "dist-electron/**/*",
-      "package.json"
-    ],
-    "asarUnpack": [
-      "**/*.node"
-    ],
-    "win": {
-      "target": "nsis"
-    },
-    "mac": {
-      "target": "dmg"
-    },
-    "linux": {
-      "target": "AppImage"
-    }
+    "package": "npm run build && electron-builder --config electron-builder.config.cjs"
   },
   "dependencies": {
     "@fontsource-variable/geist": "^5.2.9",
