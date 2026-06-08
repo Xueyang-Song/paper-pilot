@@ -254,6 +254,33 @@ export const jobSchema = z.object({
 });
 export type Job = z.infer<typeof jobSchema>;
 
+export const updateStateSchema = z.enum([
+  "disabled",
+  "idle",
+  "checking",
+  "available",
+  "downloading",
+  "downloaded",
+  "not-available",
+  "failed"
+]);
+export type UpdateState = z.infer<typeof updateStateSchema>;
+
+export const updateStatusSchema = z.object({
+  state: updateStateSchema,
+  currentVersion: z.string(),
+  availableVersion: z.string().optional(),
+  downloadPercent: z.number().min(0).max(100).optional(),
+  transferredBytes: z.number().nonnegative().optional(),
+  totalBytes: z.number().nonnegative().optional(),
+  bytesPerSecond: z.number().nonnegative().optional(),
+  lastCheckedAt: z.string().optional(),
+  retryCount: z.number().int().nonnegative().default(0),
+  nextRetryAt: z.string().optional(),
+  error: z.string().optional()
+});
+export type UpdateStatus = z.infer<typeof updateStatusSchema>;
+
 export const appSettingsSchema = z.object({
   ui: z
     .object({

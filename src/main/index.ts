@@ -18,6 +18,7 @@ import { PaperScoringService } from "./services/paper-scoring-service.js";
 import { PythonService } from "./services/python-service.js";
 import { SearchService } from "./services/search-service.js";
 import { SettingsService } from "./services/settings-service.js";
+import { createUpdateService } from "./services/update-service.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -110,9 +111,15 @@ app.whenReady().then(() => {
   const ai = new AiService(db, settings, credentials, artifacts, jobs);
   const localAgent = new LocalAgentService(db, registry, crawl, ai, jobs, { settings });
   const agent = new AgentService(db, crawl, ai, artifacts, jobs, localAgent);
+  const updates = createUpdateService({
+    currentVersion: app.getVersion(),
+    isPackaged: app.isPackaged,
+    platform: process.platform
+  });
 
-  registerIpc({ db, registry, agent, crawl, ai, artifacts, credentials, settings, python, jobs, scoring, search, dataRoot });
+  registerIpc({ db, registry, agent, crawl, ai, artifacts, credentials, settings, python, jobs, scoring, search, updates, dataRoot });
   mainWindow = createWindow();
+  updates.start();
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) mainWindow = createWindow();
