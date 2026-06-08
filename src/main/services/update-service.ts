@@ -1,6 +1,7 @@
 import { EventEmitter } from "node:events";
-import { autoUpdater } from "electron-updater";
+import { createRequire } from "node:module";
 import type { UpdateStatus } from "../../shared/schemas.js";
+import type * as ElectronUpdater from "electron-updater";
 
 export const UPDATE_STARTUP_CHECK_DELAY_MS = 10_000;
 export const UPDATE_PERIODIC_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1_000;
@@ -296,6 +297,8 @@ export class UpdateService extends EventEmitter {
 }
 
 export function createUpdateService(options: Omit<UpdateServiceOptions, "updater">): UpdateService {
+  const require = createRequire(import.meta.url);
+  const { autoUpdater } = require("electron-updater") as typeof ElectronUpdater;
   return new UpdateService({ ...options, updater: autoUpdater });
 }
 
