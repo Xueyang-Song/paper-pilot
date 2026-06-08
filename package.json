@@ -1,6 +1,6 @@
 {
   "name": "paper-pilot",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "A local-first Electron research assistant for crawling papers and generating AI-backed scientific insights.",
   "private": true,
   "type": "module",
