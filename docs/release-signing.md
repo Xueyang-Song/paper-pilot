@@ -1,6 +1,6 @@
 # Release Signing
 
-Paper Pilot publishes a signed Windows NSIS installer from GitHub Actions. The release workflow uses GitHub OIDC with Azure Artifact Signing, so it does not need a stored Azure client secret.
+Paper Pilot publishes a signed Windows NSIS installer from GitHub Actions. The release workflow uses Azure Artifact Signing through electron-builder.
 
 ## Azure Signing Resources
 
@@ -48,9 +48,17 @@ az role assignment create `
   --assignee-principal-type ServicePrincipal `
   --role "Artifact Signing Certificate Profile Signer" `
   --scope $scope
+
+$credential = az ad app credential reset `
+  --id $app.appId `
+  --append `
+  --display-name "paper-pilot-github-release-ci" `
+  --years 1 | ConvertFrom-Json
 ```
 
 If Azure displays the older role name, use `Trusted Signing Certificate Profile Signer`; it maps to the same signing permission.
+
+Store `$credential.password` as the `AZURE_CLIENT_SECRET` GitHub environment secret. Rotate this credential before its one-year expiration.
 
 ## GitHub Environment Setup
 
@@ -72,7 +80,13 @@ AZURE_SIGNING_CERTIFICATE_PROFILE_NAME=PaperPilotCert1
 AZURE_SIGNING_PUBLISHER_NAME=Zhuowen Cui
 ```
 
-These values are referenced with GitHub Actions `vars`, not `secrets`. The workflow relies on the environment-bound OIDC trust and Azure role assignment for authorization.
+Store this as an environment secret on the `release` environment:
+
+```text
+AZURE_CLIENT_SECRET=<Entra app client secret>
+```
+
+The non-sensitive values are referenced with GitHub Actions `vars`. `AZURE_CLIENT_SECRET` is referenced with GitHub Actions `secrets` and is only exposed to the signing job that targets the protected `release` environment.
 
 ## Release Flow
 
