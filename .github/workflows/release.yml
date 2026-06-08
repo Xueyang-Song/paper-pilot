@@ -118,18 +118,52 @@ jobs:
             }
           }
 
+      - name: Verify updater metadata
+        shell: pwsh
+        run: |
+          $installerFiles = @(Get-ChildItem -Path release -File -Filter *.exe | Sort-Object Name)
+
+          if ($installerFiles.Count -eq 0) {
+            throw "No installer executables were produced."
+          }
+
+          $latestYml = Get-Item -Path release\latest.yml -ErrorAction SilentlyContinue
+          if (-not $latestYml) {
+            throw "latest.yml was not produced. Check electron-builder publish configuration."
+          }
+
+          $latestContent = Get-Content -Path $latestYml.FullName -Raw
+          if ($latestContent -notmatch "sha512") {
+            throw "latest.yml does not contain SHA512 update metadata."
+          }
+
+          foreach ($installer in $installerFiles) {
+            $blockmapPath = "$($installer.FullName).blockmap"
+            if (-not (Test-Path -LiteralPath $blockmapPath)) {
+              throw "Missing updater blockmap for $($installer.Name)."
+            }
+
+            if ($latestContent -notmatch [regex]::Escape($installer.Name)) {
+              throw "latest.yml does not reference $($installer.Name)."
+            }
+          }
+
       - name: Generate checksums
         shell: pwsh
         run: |
-          $installerFiles = Get-ChildItem -Path release -File -Filter *.exe | Sort-Object Name
+          $releaseFiles = @(
+            Get-ChildItem -Path release -File -Filter *.exe
+            Get-ChildItem -Path release -File -Filter *.exe.blockmap
+            Get-Item -Path release\latest.yml
+          ) | Sort-Object Name
 
-          if ($installerFiles.Count -eq 0) {
-            throw "No installer executables were produced for checksum generation."
+          if ($releaseFiles.Count -eq 0) {
+            throw "No release files were produced for checksum generation."
           }
 
-          $checksums = foreach ($installer in $installerFiles) {
-            $hash = Get-FileHash -Path $installer.FullName -Algorithm SHA256
-            "$($hash.Hash.ToLowerInvariant())  $($installer.Name)"
+          $checksums = foreach ($file in $releaseFiles) {
+            $hash = Get-FileHash -Path $file.FullName -Algorithm SHA256
+            "$($hash.Hash.ToLowerInvariant())  $($file.Name)"
           }
 
           $checksums | Set-Content -Path release\SHA256SUMS.txt -Encoding ascii
@@ -140,6 +174,8 @@ jobs:
           name: paper-pilot-windows-signed
           path: |
             release/*.exe
+            release/*.exe.blockmap
+            release/latest.yml
             release/SHA256SUMS.txt
           if-no-files-found: error
 
@@ -165,7 +201,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          mapfile -d '' files < <(find release-artifacts -type f \( -name '*.exe' -o -name 'SHA256SUMS.txt' \) -print0 | sort -z)
+          mapfile -d '' files < <(find release-artifacts -type f \( -name '*.exe' -o -name '*.exe.blockmap' -o -name 'latest.yml' -o -name 'SHA256SUMS.txt' \) -print0 | sort -z)
 
           if [ "${#files[@]}" -eq 0 ]; then
             echo "No release files were downloaded." >&2

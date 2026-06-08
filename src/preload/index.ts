@@ -19,7 +19,8 @@ import type {
   ReindexResponse,
   SearchRequest,
   SearchResponse,
-  SourceDefinition
+  SourceDefinition,
+  UpdateStatus
 } from "../shared/schemas.js";
 
 const { contextBridge, ipcRenderer } = electron;
@@ -73,6 +74,11 @@ export interface PaperPilotApi {
   getSettings(): Promise<AppSettings>;
   updateSettings(input: Partial<AppSettings>): Promise<AppSettings>;
   openDataFolder(): Promise<{ ok: boolean }>;
+  getUpdateStatus(): Promise<UpdateStatus>;
+  checkForUpdates(): Promise<UpdateStatus>;
+  downloadUpdate(): Promise<UpdateStatus>;
+  installUpdateNow(): Promise<UpdateStatus>;
+  onUpdateStatusChanged(listener: (status: UpdateStatus) => void): () => void;
   saveCredential(input: CredentialUpsert): Promise<Array<{ sourceId: string; label: string; updatedAt: string }>>;
   listCredentialFlags(): Promise<Array<{ sourceId: string; label: string; updatedAt: string }>>;
   removeCredential(input: { sourceId: string; label?: string }): Promise<Array<{ sourceId: string; label: string; updatedAt: string }>>;
@@ -142,6 +148,15 @@ const api: PaperPilotApi = {
   getSettings: () => ipcRenderer.invoke("settings:get"),
   updateSettings: (input) => ipcRenderer.invoke("settings:update", input),
   openDataFolder: () => ipcRenderer.invoke("app:openDataFolder"),
+  getUpdateStatus: () => ipcRenderer.invoke("updates:getStatus"),
+  checkForUpdates: () => ipcRenderer.invoke("updates:check"),
+  downloadUpdate: () => ipcRenderer.invoke("updates:download"),
+  installUpdateNow: () => ipcRenderer.invoke("updates:installNow"),
+  onUpdateStatusChanged: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, status: UpdateStatus) => listener(status);
+    ipcRenderer.on("updates:changed", handler);
+    return () => ipcRenderer.off("updates:changed", handler);
+  },
   saveCredential: (input) => ipcRenderer.invoke("credentials:save", input),
   listCredentialFlags: () => ipcRenderer.invoke("credentials:listFlags"),
   removeCredential: (input) => ipcRenderer.invoke("credentials:remove", input),

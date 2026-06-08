@@ -32,6 +32,7 @@ import type { PaperScoringService } from "./services/paper-scoring-service.js";
 import type { PythonService } from "./services/python-service.js";
 import type { SearchService } from "./services/search-service.js";
 import type { SettingsService } from "./services/settings-service.js";
+import type { UpdateService } from "./services/update-service.js";
 
 const { BrowserWindow, dialog, ipcMain, shell } = electron;
 const MAX_TEXT_VIEW_BYTES = 2 * 1024 * 1024;
@@ -49,6 +50,7 @@ export interface IpcServices {
   jobs: JobQueue;
   scoring: PaperScoringService;
   search: SearchService;
+  updates: UpdateService;
   dataRoot: string;
 }
 
@@ -203,6 +205,14 @@ export function registerIpc(services: IpcServices): void {
     if (error) throw new Error(error);
     return { ok: true };
   });
+
+  ipcMain.handle("updates:getStatus", () => services.updates.getStatus());
+
+  ipcMain.handle("updates:check", () => services.updates.checkForUpdates(true));
+
+  ipcMain.handle("updates:download", () => services.updates.downloadUpdate(true));
+
+  ipcMain.handle("updates:installNow", () => services.updates.installUpdateNow());
 
   ipcMain.handle("credentials:save", (_event, input: unknown) => {
     services.credentials.upsert(credentialUpsertSchema.parse(input));
@@ -442,6 +452,12 @@ export function registerIpc(services: IpcServices): void {
   services.jobs.onChanged((job) => {
     for (const window of BrowserWindow.getAllWindows()) {
       window.webContents.send("jobs:changed", job);
+    }
+  });
+
+  services.updates.on("changed", (status) => {
+    for (const window of BrowserWindow.getAllWindows()) {
+      window.webContents.send("updates:changed", status);
     }
   });
 }

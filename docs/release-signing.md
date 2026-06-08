@@ -92,7 +92,7 @@ The non-sensitive values are referenced with GitHub Actions `vars`. `AZURE_CLIEN
 
 1. Update `package.json` to the version you want to publish.
 2. Create and push a release tag such as `v0.1.1`.
-3. GitHub Actions runs `npm run verify`, builds a Windows x64 NSIS installer, signs it with Azure Artifact Signing, verifies Authenticode signatures, and publishes the installer plus `SHA256SUMS.txt` to the GitHub Release.
+3. GitHub Actions runs `npm run verify`, builds a Windows x64 NSIS installer, signs it with Azure Artifact Signing, verifies Authenticode signatures, verifies updater metadata, and publishes the installer, blockmap, `latest.yml`, and `SHA256SUMS.txt` to the GitHub Release.
 
 ## Local Checks
 
@@ -102,5 +102,7 @@ Run the unsigned local checks before tagging:
 npm run verify
 npm run package -- --win --x64 --publish never
 ```
+
+The unsigned local package should produce `release/latest.yml`, an installer `.exe`, an installer `.exe.blockmap`, and `release/win-unpacked/resources/app-update.yml`. GitHub Releases need those metadata files for installed apps to discover and download updates.
 
 Do not set `AZURE_SIGNING_ENABLED=1` locally unless the Azure signing variables are present and you intend to produce a signed build.

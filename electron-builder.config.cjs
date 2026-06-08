@@ -17,8 +17,18 @@ const config = {
   directories: {
     output: "release",
   },
+  artifactName: "Paper-Pilot-Setup-${version}.${ext}",
   files: ["dist/**/*", "dist-electron/**/*", "package.json"],
   asarUnpack: ["**/*.node"],
+  publish: [
+    {
+      provider: "github",
+      owner: "Xueyang-Song",
+      repo: "paper-pilot",
+      channel: "latest",
+      releaseType: "release",
+    },
+  ],
   win: {
     target: "nsis",
   },

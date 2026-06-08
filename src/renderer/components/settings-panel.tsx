@@ -1,14 +1,31 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Brain, CheckCircle2, Database, KeyRound, Loader2, Monitor, Moon, RefreshCw, Search, ShieldCheck, Sun, Trash2 } from "lucide-react";
+import {
+  Brain,
+  CheckCircle2,
+  Database,
+  Download,
+  KeyRound,
+  Loader2,
+  Monitor,
+  Moon,
+  PackageCheck,
+  Power,
+  RefreshCw,
+  Search,
+  ShieldCheck,
+  Sun,
+  Trash2
+} from "lucide-react";
 import type { JSX } from "react";
 import { useEffect, useMemo, useState } from "react";
-import type { AiProviderHealth, AppSettings, Project, SourceDefinition, SourceId } from "../../shared/schemas";
+import type { AiProviderHealth, AppSettings, Project, SourceDefinition, SourceId, UpdateStatus } from "../../shared/schemas";
 import { PanelSection, PolicyToggle } from "./ui";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
@@ -45,6 +62,7 @@ export function SettingsPanel({
   const queryClient = useQueryClient();
   const settingsQuery = useQuery({ queryKey: ["settings"], queryFn: () => window.paperPilot.getSettings() });
   const flagsQuery = useQuery({ queryKey: ["credentialFlags"], queryFn: () => window.paperPilot.listCredentialFlags() });
+  const updateQuery = useQuery({ queryKey: ["updates"], queryFn: () => window.paperPilot.getUpdateStatus() });
   const [selectedSource, setSelectedSource] = useState<SourceId | "ai-gateway">("ai-gateway");
   const [secret, setSecret] = useState("");
   const [provider, setProvider] = useState<AppSettings["ai"]["provider"]>("ollama");
@@ -58,6 +76,12 @@ export function SettingsPanel({
       setBaseUrl(settingsQuery.data.ai.baseUrl);
     }
   }, [settingsQuery.data]);
+
+  useEffect(() => {
+    return window.paperPilot.onUpdateStatusChanged((status) => {
+      queryClient.setQueryData<UpdateStatus>(["updates"], status);
+    });
+  }, [queryClient]);
 
   const saveCredential = useMutation({
     mutationFn: () => window.paperPilot.saveCredential({ sourceId: selectedSource, label: "default", secret }),
@@ -124,12 +148,34 @@ export function SettingsPanel({
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["settings"] })
   });
 
+  const checkForUpdates = useMutation({
+    mutationFn: () => window.paperPilot.checkForUpdates(),
+    onSuccess: (status) => queryClient.setQueryData(["updates"], status)
+  });
+
+  const downloadUpdate = useMutation({
+    mutationFn: () => window.paperPilot.downloadUpdate(),
+    onSuccess: (status) => queryClient.setQueryData(["updates"], status)
+  });
+
+  const installUpdateNow = useMutation({
+    mutationFn: () => window.paperPilot.installUpdateNow(),
+    onSuccess: (status) => queryClient.setQueryData(["updates"], status)
+  });
+
   const flags = flagsQuery.data ?? [];
   const credentialed = useMemo(() => new Set(flags.map((flag) => flag.sourceId)), [flags]);
   const candidateHealth = checkProvider.data ?? aiHealth;
   const displayedHealth =
     candidateHealth?.provider === provider && candidateHealth.baseUrl === baseUrl && candidateHealth.model === model ? candidateHealth : undefined;
   const disabledSourceIds = new Set(settingsQuery.data?.sources.disabledSourceIds ?? []);
+  const updateStatus = updateQuery.data;
+  const updateBusy =
+    updateStatus?.state === "checking" ||
+    updateStatus?.state === "downloading" ||
+    checkForUpdates.isPending ||
+    downloadUpdate.isPending ||
+    installUpdateNow.isPending;
 
   function changeProvider(nextProvider: AppSettings["ai"]["provider"]): void {
     setProvider(nextProvider);
@@ -172,6 +218,81 @@ export function SettingsPanel({
                   );
                 })}
               </ToggleGroup>
+            </PanelSection>
+
+            <PanelSection icon={<PackageCheck size={17} />} title="Software Update">
+              <div className="rounded-lg border border-border bg-card p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium">{updateStatusText(updateStatus)}</div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      Current version {updateStatus?.currentVersion ?? "unknown"}
+                      {updateStatus?.lastCheckedAt ? ` / Last checked ${formatDate(updateStatus.lastCheckedAt)}` : ""}
+                    </div>
+                  </div>
+                  {updateStatus?.state ? (
+                    <Badge variant={updateStatus.state === "failed" ? "destructive" : "outline"} className="shrink-0 capitalize">
+                      {updateStatus.state.replace("-", " ")}
+                    </Badge>
+                  ) : null}
+                </div>
+                {updateStatus?.state === "downloading" ? (
+                  <div className="mt-3">
+                    <Progress value={updateStatus.downloadPercent ?? 0} />
+                    <div className="mt-2 text-xs text-muted-foreground">
+                      {formatPercent(updateStatus.downloadPercent)} downloaded
+                      {updateStatus.totalBytes ? ` / ${formatBytes(updateStatus.transferredBytes ?? 0)} of ${formatBytes(updateStatus.totalBytes)}` : ""}
+                    </div>
+                  </div>
+                ) : null}
+                {updateStatus?.state === "failed" && updateStatus.error ? (
+                  <Alert variant="destructive" className="mt-3">
+                    <AlertTitle>Update failed</AlertTitle>
+                    <AlertDescription>
+                      {updateStatus.error}
+                      {updateStatus.nextRetryAt ? ` Next retry ${formatDate(updateStatus.nextRetryAt)}.` : ""}
+                    </AlertDescription>
+                  </Alert>
+                ) : null}
+                {updateStatus?.state === "downloaded" ? (
+                  <Alert className="mt-3 border-primary/40 bg-accent/45">
+                    <AlertDescription>
+                      Version {updateStatus.availableVersion ?? "update"} is ready and will install the next time Paper Pilot restarts.
+                    </AlertDescription>
+                  </Alert>
+                ) : null}
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  {updateStatus?.state === "failed" ? (
+                    <Button type="button" variant="outline" onClick={() => checkForUpdates.mutate()} disabled={updateBusy}>
+                      {checkForUpdates.isPending ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                      Retry
+                    </Button>
+                  ) : updateStatus && ["idle", "not-available"].includes(updateStatus.state) ? (
+                    <Button type="button" variant="outline" onClick={() => checkForUpdates.mutate()} disabled={updateBusy}>
+                      {checkForUpdates.isPending ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                      Check
+                    </Button>
+                  ) : null}
+                  {updateStatus?.state === "available" ? (
+                    <Button type="button" onClick={() => downloadUpdate.mutate()} disabled={updateBusy}>
+                      {downloadUpdate.isPending ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+                      Download
+                    </Button>
+                  ) : null}
+                  {updateStatus?.state === "downloaded" ? (
+                    <Button type="button" onClick={() => installUpdateNow.mutate()} disabled={installUpdateNow.isPending} className="col-span-2">
+                      {installUpdateNow.isPending ? <Loader2 size={14} className="animate-spin" /> : <Power size={14} />}
+                      Restart and install
+                    </Button>
+                  ) : null}
+                  {updateStatus?.state === "checking" || updateStatus?.state === "downloading" ? (
+                    <Button type="button" variant="outline" disabled className="col-span-2">
+                      <Loader2 size={14} className="animate-spin" />
+                      {updateStatus.state === "checking" ? "Checking" : "Downloading"}
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
             </PanelSection>
 
             <PanelSection icon={<Brain size={17} />} title="AI Provider">
@@ -388,4 +509,43 @@ export function SettingsPanel({
 
 function FieldLabel({ children }: { children: string }): JSX.Element {
   return <label className="block text-xs font-medium text-muted-foreground">{children}</label>;
+}
+
+function updateStatusText(status: UpdateStatus | undefined): string {
+  if (!status) return "Checking update status...";
+  if (status.state === "disabled") return "Updates are available in installed Windows releases.";
+  if (status.state === "idle") return "Ready to check for updates.";
+  if (status.state === "checking") return "Checking for updates...";
+  if (status.state === "available") return `Version ${status.availableVersion ?? "update"} is available.`;
+  if (status.state === "downloading") return `Downloading version ${status.availableVersion ?? "update"}...`;
+  if (status.state === "downloaded") return `Version ${status.availableVersion ?? "update"} is ready.`;
+  if (status.state === "not-available") return "Paper Pilot is up to date.";
+  return "Update failed.";
+}
+
+function formatPercent(value: number | undefined): string {
+  return `${Math.round(value ?? 0)}%`;
+}
+
+function formatBytes(value: number): string {
+  if (value < 1024) return `${value} B`;
+  const units = ["KB", "MB", "GB"];
+  let unitIndex = -1;
+  let size = value;
+  do {
+    size /= 1024;
+    unitIndex += 1;
+  } while (size >= 1024 && unitIndex < units.length - 1);
+  return `${size.toFixed(size >= 10 ? 0 : 1)} ${units[unitIndex]}`;
+}
+
+function formatDate(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit"
+  });
 }
