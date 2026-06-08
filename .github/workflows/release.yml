@@ -24,10 +24,22 @@ jobs:
     name: Verify
 
     steps:
+      - name: Validate manual release tag
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        shell: pwsh
+        run: |
+          if ("${{ github.ref_type }}" -ne "tag") {
+            throw "Manual releases must be run from an existing tag ref. Create and push '${{ inputs.tag }}', then choose that tag in GitHub's 'Use workflow from' selector."
+          }
+
+          if ("${{ github.ref_name }}" -ne "${{ inputs.tag }}") {
+            throw "The selected workflow ref '${{ github.ref_name }}' must match the tag input '${{ inputs.tag }}'."
+          }
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.tag || github.ref }}
+          ref: ${{ github.ref }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -64,7 +76,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.tag || github.ref }}
+          ref: ${{ github.ref }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -139,6 +151,7 @@ jobs:
 
     env:
       GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
 
     steps:
       - name: Download signed release artifacts
