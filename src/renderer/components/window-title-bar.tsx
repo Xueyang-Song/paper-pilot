@@ -40,12 +40,19 @@ export function WindowTitleBar({
     : "AI provider status has not been checked yet.";
 
   useEffect(() => {
-    void window.paperPilot.platform().then(setPlatform).catch(() => setPlatform("win32"));
+    void window.paperPilot
+      .platform()
+      .then(setPlatform)
+      .catch(() => setPlatform("win32"));
   }, []);
 
   function toggleMaximizeFromDrag(event: MouseEvent<HTMLElement>): void {
     const target = event.target;
-    if (target instanceof HTMLElement && target.closest(".window-no-drag, button, input, textarea, select, a, [role='button']")) return;
+    if (
+      target instanceof HTMLElement &&
+      target.closest(".window-no-drag, button, input, textarea, select, a, [role='button']")
+    )
+      return;
     void window.paperPilot.toggleMaximizeWindow();
   }
 
@@ -66,9 +73,7 @@ export function WindowTitleBar({
       </div>
 
       <div className="flex min-w-0 flex-1 items-center justify-center gap-2">
-        <div className="truncate text-center text-sm font-medium">
-          {project?.title ?? "New research workspace"}
-        </div>
+        <div className="truncate text-center text-sm font-medium">{project?.title ?? "New research workspace"}</div>
         <div className="hidden shrink-0 items-center gap-1.5 text-[11px] text-muted-foreground lg:flex">
           <span>{paperCount} papers</span>
           <span className="text-border">/</span>

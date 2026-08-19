@@ -19,7 +19,15 @@ const browserIt = runBrowserSmoke ? it : it.skip;
 describe("crawler smoke tests", () => {
   liveIt("runs no-key HTTP sources without throwing", async () => {
     const registry = new SourceRegistry();
-    const sourceIds = ["openalex", "crossref", "semantic-scholar", "pubmed", "arxiv", "europe-pmc", "unpaywall"] as const;
+    const sourceIds = [
+      "openalex",
+      "crossref",
+      "semantic-scholar",
+      "pubmed",
+      "arxiv",
+      "europe-pmc",
+      "unpaywall"
+    ] as const;
     const config: CrawlConfig = {
       topic: "graph neural networks protein folding",
       maxPapers: 1,
@@ -32,7 +40,11 @@ describe("crawler smoke tests", () => {
 
     const results = await Promise.all(
       sourceIds.map((sourceId) =>
-        registry.run(sourceId, { ...config, sourceIds: [sourceId] }, { credentials: {}, userAgent: "PaperPilot/0.1 smoke-test" })
+        registry.run(
+          sourceId,
+          { ...config, sourceIds: [sourceId] },
+          { credentials: {}, userAgent: "PaperPilot/0.1 smoke-test" }
+        )
       )
     );
 

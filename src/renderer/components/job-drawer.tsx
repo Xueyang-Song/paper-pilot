@@ -56,12 +56,7 @@ export function JobDrawer({ projectId, initialJobs }: { projectId?: string; init
     <div className="absolute bottom-4 right-[360px] z-20 w-80 space-y-2">
       <div className="flex justify-end gap-2">
         {jobs.length ? (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setShowHistory((current) => !current)}
-          >
+          <Button type="button" variant="outline" size="sm" onClick={() => setShowHistory((current) => !current)}>
             <History size={13} />
             {showHistory ? "Active" : "History"}
           </Button>
@@ -89,7 +84,11 @@ export function JobDrawer({ projectId, initialJobs }: { projectId?: string; init
           <Card className="rounded-lg border-border bg-card p-3 py-3 shadow-lg">
             <div className="mb-2 flex items-center justify-between gap-3">
               <div className="flex min-w-0 items-center gap-2 text-sm font-medium">
-                {job.status === "running" ? <Loader2 size={15} className="animate-spin text-primary" /> : <Gauge size={15} />}
+                {job.status === "running" ? (
+                  <Loader2 size={15} className="animate-spin text-primary" />
+                ) : (
+                  <Gauge size={15} />
+                )}
                 <span className="truncate">{job.title}</span>
               </div>
               <Badge variant="outline" className="shrink-0">
@@ -124,7 +123,14 @@ export function JobDrawer({ projectId, initialJobs }: { projectId?: string; init
             ) : null}
             {job.status === "running" || job.status === "queued" ? (
               <div className="mt-3">
-                <Button type="button" variant="destructive" onClick={() => cancelJob.mutate(job.id)} disabled={cancelJob.isPending} className="w-full" size="sm">
+                <Button
+                  type="button"
+                  variant="destructive"
+                  onClick={() => cancelJob.mutate(job.id)}
+                  disabled={cancelJob.isPending}
+                  className="w-full"
+                  size="sm"
+                >
                   <XCircle size={13} />
                   Cancel
                 </Button>
@@ -132,7 +138,14 @@ export function JobDrawer({ projectId, initialJobs }: { projectId?: string; init
             ) : null}
             {job.status === "failed" || job.status === "cancelled" ? (
               <div className="mt-3">
-                <Button type="button" variant="outline" onClick={() => retryJob.mutate(job.id)} disabled={retryJob.isPending} className="w-full" size="sm">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => retryJob.mutate(job.id)}
+                  disabled={retryJob.isPending}
+                  className="w-full"
+                  size="sm"
+                >
                   <RotateCcw size={13} />
                   Retry
                 </Button>

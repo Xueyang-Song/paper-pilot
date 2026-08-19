@@ -54,7 +54,12 @@ export function SearchPanel({
     return { type: "global" };
   }, [activeArtifactId, activeProject, scopeType]);
 
-  const scopeKey = scope.type === "global" ? "global" : scope.type === "project" ? `project:${scope.projectId}` : `file:${scope.artifactId}`;
+  const scopeKey =
+    scope.type === "global"
+      ? "global"
+      : scope.type === "project"
+        ? `project:${scope.projectId}`
+        : `file:${scope.artifactId}`;
   const searchQuery = useQuery({
     queryKey: ["search", debouncedQuery, scopeKey],
     queryFn: () => window.paperPilot.search({ query: debouncedQuery, scope, limit: 40 }),
@@ -70,7 +75,9 @@ export function SearchPanel({
     });
   }, [debouncedQuery, searchQuery.isLoading]);
 
-  const displayedResults = (searchQuery.data?.results ?? []).filter((result) => kindFilter === "all" || result.kind === kindFilter);
+  const displayedResults = (searchQuery.data?.results ?? []).filter(
+    (result) => kindFilter === "all" || result.kind === kindFilter
+  );
   const scopeOptions: Array<{ type: SearchScopeType; label: string; disabled: boolean }> = [
     { type: "global", label: "Global", disabled: false },
     { type: "project", label: "Project", disabled: !activeProject },
@@ -86,7 +93,11 @@ export function SearchPanel({
         <DialogHeader className="border-b border-border px-5 py-4">
           <DialogTitle>Search</DialogTitle>
           <DialogDescription>
-            {scope.type === "global" ? "All projects" : scope.type === "project" ? activeProject?.title : "Current file"}
+            {scope.type === "global"
+              ? "All projects"
+              : scope.type === "project"
+                ? activeProject?.title
+                : "Current file"}
           </DialogDescription>
         </DialogHeader>
         <div className="shrink-0 border-b border-border bg-card/60 p-4">
@@ -101,14 +112,24 @@ export function SearchPanel({
             />
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
-            <ToggleGroup type="single" value={scopeType} onValueChange={(value) => value && setScopeType(value as SearchScopeType)} variant="outline">
+            <ToggleGroup
+              type="single"
+              value={scopeType}
+              onValueChange={(value) => value && setScopeType(value as SearchScopeType)}
+              variant="outline"
+            >
               {scopeOptions.map((option) => (
                 <ToggleGroupItem key={option.type} value={option.type} disabled={option.disabled}>
                   {option.label}
                 </ToggleGroupItem>
               ))}
             </ToggleGroup>
-            <ToggleGroup type="single" value={kindFilter} onValueChange={(value) => value && setKindFilter(value as typeof kindFilter)} variant="outline">
+            <ToggleGroup
+              type="single"
+              value={kindFilter}
+              onValueChange={(value) => value && setKindFilter(value as typeof kindFilter)}
+              variant="outline"
+            >
               {(["all", "paper", "chunk"] as const).map((kind) => (
                 <ToggleGroupItem key={kind} value={kind}>
                   {kind === "all" ? "All" : kind === "paper" ? "Papers" : "Files"}
@@ -119,7 +140,14 @@ export function SearchPanel({
           {recentQueries.length ? (
             <div className="mt-2 flex flex-wrap gap-2">
               {recentQueries.map((recent) => (
-                <Button key={recent} type="button" variant="ghost" size="xs" onClick={() => setQuery(recent)} className="max-w-44 truncate">
+                <Button
+                  key={recent}
+                  type="button"
+                  variant="ghost"
+                  size="xs"
+                  onClick={() => setQuery(recent)}
+                  className="max-w-44 truncate"
+                >
                   {recent}
                 </Button>
               ))}
@@ -129,7 +157,9 @@ export function SearchPanel({
         <ScrollArea className="min-h-0 flex-1">
           <div className="p-3">
             {debouncedQuery.length < 2 ? (
-              <div className="grid h-[360px] place-items-center text-sm text-muted-foreground">Type at least 2 characters.</div>
+              <div className="grid h-[360px] place-items-center text-sm text-muted-foreground">
+                Type at least 2 characters.
+              </div>
             ) : searchQuery.isLoading ? (
               <div className="grid h-[360px] place-items-center">
                 <div className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-3 text-sm text-muted-foreground shadow-sm">
@@ -149,7 +179,12 @@ export function SearchPanel({
                     result={result}
                     query={debouncedQuery}
                     onOpenArtifact={(clickedResult) =>
-                      onOpenArtifact(clickedResult.projectId, clickedResult.artifactId ?? "", debouncedQuery, clickedResult)
+                      onOpenArtifact(
+                        clickedResult.projectId,
+                        clickedResult.artifactId ?? "",
+                        debouncedQuery,
+                        clickedResult
+                      )
                     }
                   />
                 ))}
@@ -188,7 +223,9 @@ function SearchResultRow({
       <div className="mb-2 flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="truncate text-sm font-semibold">{result.title}</div>
-          <div className="mt-0.5 truncate text-xs text-muted-foreground">{result.subtitle ?? result.projectTitle ?? result.kind}</div>
+          <div className="mt-0.5 truncate text-xs text-muted-foreground">
+            {result.subtitle ?? result.projectTitle ?? result.kind}
+          </div>
         </div>
         <Badge variant="outline" className="shrink-0">
           {result.kind === "paper" ? "Paper" : "File"}
@@ -199,7 +236,10 @@ function SearchResultRow({
       </div>
     </>
   );
-  const className = cn("rounded-lg border-border bg-card p-3 py-3 text-left shadow-sm transition", clickable && "hover:border-primary/70 hover:shadow-md");
+  const className = cn(
+    "rounded-lg border-border bg-card p-3 py-3 text-left shadow-sm transition",
+    clickable && "hover:border-primary/70 hover:shadow-md"
+  );
   if (!clickable) return <Card className={className}>{content}</Card>;
   return (
     <button type="button" onClick={() => onOpenArtifact(result)} className="w-full">

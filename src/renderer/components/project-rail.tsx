@@ -30,7 +30,6 @@ export function ProjectRail(props: {
   activeProjectId?: string;
   onSelect(projectId: string): void;
   onCreate(): void;
-  onRename(projectId: string, title: string): Promise<unknown>;
   onUpdate(input: { projectId: string; title?: string; topic?: string; description?: string }): Promise<unknown>;
   onPin(projectId: string, pinned: boolean): Promise<unknown>;
   onArchive(projectId: string, archived: boolean): Promise<unknown>;
@@ -42,7 +41,11 @@ export function ProjectRail(props: {
   const [filter, setFilter] = useState("");
   const normalizedFilter = filter.trim().toLowerCase();
   const filteredProjects = props.projects.filter((project) =>
-    [project.title, project.topic, project.description].filter(Boolean).join(" ").toLowerCase().includes(normalizedFilter)
+    [project.title, project.topic, project.description]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase()
+      .includes(normalizedFilter)
   );
   const activeProjects = filteredProjects.filter((project) => !project.archivedAt);
   const archivedProjects = filteredProjects.filter((project) => project.archivedAt);
@@ -76,7 +79,9 @@ export function ProjectRail(props: {
               className="h-9 min-w-0 flex-1 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0 dark:bg-transparent"
             />
           </div>
-          <div className="mb-2 px-2 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Projects</div>
+          <div className="mb-2 px-2 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+            Projects
+          </div>
           <div className="space-y-1">
             {activeProjects.map((project) => (
               <ProjectRailItem
@@ -84,7 +89,6 @@ export function ProjectRail(props: {
                 project={project}
                 selected={project.id === props.activeProjectId}
                 onSelect={props.onSelect}
-                onRename={props.onRename}
                 onUpdate={props.onUpdate}
                 onPin={props.onPin}
                 onArchive={props.onArchive}
@@ -95,13 +99,19 @@ export function ProjectRail(props: {
             ))}
             {!filteredProjects.length ? (
               <Alert className="border-dashed">
-                <AlertDescription>{props.projects.length ? "No projects match that search." : "Create a project from chat or the title bar."}</AlertDescription>
+                <AlertDescription>
+                  {props.projects.length
+                    ? "No projects match that search."
+                    : "Create a project from chat or the title bar."}
+                </AlertDescription>
               </Alert>
             ) : null}
           </div>
           {archivedProjects.length ? (
             <div className="mt-5">
-              <div className="mb-2 px-2 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Archived</div>
+              <div className="mb-2 px-2 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                Archived
+              </div>
               <div className="space-y-1">
                 {archivedProjects.map((project) => (
                   <ProjectRailItem
@@ -109,7 +119,6 @@ export function ProjectRail(props: {
                     project={project}
                     selected={project.id === props.activeProjectId}
                     onSelect={props.onSelect}
-                    onRename={props.onRename}
                     onUpdate={props.onUpdate}
                     onPin={props.onPin}
                     onArchive={props.onArchive}
@@ -131,7 +140,6 @@ function ProjectRailItem({
   project,
   selected,
   onSelect,
-  onRename,
   onUpdate,
   onPin,
   onArchive,
@@ -142,7 +150,6 @@ function ProjectRailItem({
   project: Project;
   selected: boolean;
   onSelect(projectId: string): void;
-  onRename(projectId: string, title: string): Promise<unknown>;
   onUpdate(input: { projectId: string; title?: string; topic?: string; description?: string }): Promise<unknown>;
   onPin(projectId: string, pinned: boolean): Promise<unknown>;
   onArchive(projectId: string, archived: boolean): Promise<unknown>;
@@ -215,7 +222,12 @@ function ProjectRailItem({
 
   if (editing) {
     return (
-      <div className={cn("rounded-lg px-3 py-2", selected ? "bg-primary text-primary-foreground shadow-sm" : "bg-card text-card-foreground")}>
+      <div
+        className={cn(
+          "rounded-lg px-3 py-2",
+          selected ? "bg-primary text-primary-foreground shadow-sm" : "bg-card text-card-foreground"
+        )}
+      >
         <form
           className="space-y-2"
           onSubmit={(event) => {
@@ -243,7 +255,11 @@ function ProjectRailItem({
             onChange={(event) => setDraftTopic(event.target.value)}
             disabled={saving}
             placeholder="Topic"
-            className={cn("h-8 text-xs", selected && "border-primary-foreground/30 bg-primary-foreground/10 text-primary-foreground placeholder:text-primary-foreground/55")}
+            className={cn(
+              "h-8 text-xs",
+              selected &&
+                "border-primary-foreground/30 bg-primary-foreground/10 text-primary-foreground placeholder:text-primary-foreground/55"
+            )}
             maxLength={240}
           />
           <Textarea
@@ -251,7 +267,11 @@ function ProjectRailItem({
             onChange={(event) => setDraftDescription(event.target.value)}
             disabled={saving}
             placeholder="Description"
-            className={cn("min-h-16 resize-none text-xs", selected && "border-primary-foreground/30 bg-primary-foreground/10 text-primary-foreground placeholder:text-primary-foreground/55")}
+            className={cn(
+              "min-h-16 resize-none text-xs",
+              selected &&
+                "border-primary-foreground/30 bg-primary-foreground/10 text-primary-foreground placeholder:text-primary-foreground/55"
+            )}
             maxLength={2000}
           />
           <div className="flex gap-1">
@@ -263,7 +283,9 @@ function ProjectRailItem({
             </ActionIcon>
           </div>
         </form>
-        {error ? <div className={`mt-1 text-xs ${selected ? "text-primary-foreground/85" : "text-destructive"}`}>{error}</div> : null}
+        {error ? (
+          <div className={`mt-1 text-xs ${selected ? "text-primary-foreground/85" : "text-destructive"}`}>{error}</div>
+        ) : null}
       </div>
     );
   }
@@ -282,7 +304,11 @@ function ProjectRailItem({
         </div>
       </button>
       <div className="flex shrink-0 flex-wrap justify-end gap-1 opacity-0 transition group-hover:opacity-100 focus-within:opacity-100">
-        <RailAction label={project.pinnedAt ? "Unpin project" : "Pin project"} selected={selected} onClick={() => void onPin(project.id, !project.pinnedAt)}>
+        <RailAction
+          label={project.pinnedAt ? "Unpin project" : "Pin project"}
+          selected={selected}
+          onClick={() => void onPin(project.id, !project.pinnedAt)}
+        >
           {project.pinnedAt ? <PinOff size={12} /> : <Pin size={12} />}
         </RailAction>
         <RailAction label="Edit project" selected={selected} onClick={() => setEditing(true)}>

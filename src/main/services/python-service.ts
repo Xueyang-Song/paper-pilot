@@ -79,9 +79,19 @@ export class PythonService {
       cwd: projectDataPath(this.dataRoot, input.projectId),
       env: { ...process.env, PAPER_PILOT_PROJECT_DIR: projectDataPath(this.dataRoot, input.projectId) }
     });
-    const log = [`# Python Run: ${input.name}`, "", "## STDOUT", "```", result.stdout, "```", "", "## STDERR", "```", result.stderr, "```"].join(
-      "\n"
-    );
+    const log = [
+      `# Python Run: ${input.name}`,
+      "",
+      "## STDOUT",
+      "```",
+      result.stdout,
+      "```",
+      "",
+      "## STDERR",
+      "```",
+      result.stderr,
+      "```"
+    ].join("\n");
     const artifact = await this.artifacts.writeArtifact({
       projectId: input.projectId,
       type: "crawl-log",
@@ -173,7 +183,8 @@ export class PythonService {
       return { executable: appSettings.python.executablePath, venvDir: projectDir };
     }
     const venvDir = join(projectDir, ".venv");
-    const executable = process.platform === "win32" ? join(venvDir, "Scripts", "python.exe") : join(venvDir, "bin", "python");
+    const executable =
+      process.platform === "win32" ? join(venvDir, "Scripts", "python.exe") : join(venvDir, "bin", "python");
     try {
       await access(executable);
       return { executable, venvDir };

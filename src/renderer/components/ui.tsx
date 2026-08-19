@@ -21,7 +21,15 @@ export function MarkdownMessage({ content, isUser }: { content: string; isUser: 
   );
 }
 
-export function PolicyToggle({ label, checked, onChange }: { label: string; checked: boolean; onChange(checked: boolean): void }): JSX.Element {
+export function PolicyToggle({
+  label,
+  checked,
+  onChange
+}: {
+  label: string;
+  checked: boolean;
+  onChange(checked: boolean): void;
+}): JSX.Element {
   return (
     <label className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-3 py-2 text-sm">
       <span>{label}</span>
@@ -30,7 +38,15 @@ export function PolicyToggle({ label, checked, onChange }: { label: string; chec
   );
 }
 
-export function PanelSection({ icon, title, children }: { icon: JSX.Element; title: string; children: ReactNode }): JSX.Element {
+export function PanelSection({
+  icon,
+  title,
+  children
+}: {
+  icon: JSX.Element;
+  title: string;
+  children: ReactNode;
+}): JSX.Element {
   return (
     <section className="mb-5">
       <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
@@ -55,14 +71,26 @@ export function Metric({ label, value }: { label: string; value: number }): JSX.
 
 export function StatusPill({ icon, label, title }: { icon: JSX.Element; label: string; title?: string }): JSX.Element {
   return (
-    <Badge title={title} variant="outline" className="hidden h-8 max-w-[360px] gap-2 rounded-lg bg-card px-3 text-xs text-muted-foreground lg:inline-flex">
+    <Badge
+      title={title}
+      variant="outline"
+      className="hidden h-8 max-w-[360px] gap-2 rounded-lg bg-card px-3 text-xs text-muted-foreground lg:inline-flex"
+    >
       {icon}
       <span className="truncate">{label}</span>
     </Badge>
   );
 }
 
-export function IconButton({ label, onClick, children }: { label: string; onClick(): void; children: ReactNode }): JSX.Element {
+export function IconButton({
+  label,
+  onClick,
+  children
+}: {
+  label: string;
+  onClick(): void;
+  children: ReactNode;
+}): JSX.Element {
   return (
     <Button
       type="button"

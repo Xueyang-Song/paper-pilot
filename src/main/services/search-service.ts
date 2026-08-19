@@ -15,7 +15,9 @@ export class SearchService {
     const artifactId = input.scope.type === "file" ? input.scope.artifactId : undefined;
 
     const paperRows =
-      input.scope.type === "file" ? [] : this.db.searchIndexedPapers({ query: input.query, projectId, limit: Math.min(limit, 50) });
+      input.scope.type === "file"
+        ? []
+        : this.db.searchIndexedPapers({ query: input.query, projectId, limit: Math.min(limit, 50) });
     const chunkRows = this.db.searchIndexedChunks({
       query: input.query,
       projectId,
@@ -114,7 +116,12 @@ function resultKindRank(kind: SearchResult["kind"]): number {
 function pageFromMetadata(value: string): number | undefined {
   try {
     const metadata = JSON.parse(value) as { page?: unknown };
-    const page = typeof metadata.page === "number" ? metadata.page : typeof metadata.page === "string" ? Number(metadata.page) : undefined;
+    const page =
+      typeof metadata.page === "number"
+        ? metadata.page
+        : typeof metadata.page === "string"
+          ? Number(metadata.page)
+          : undefined;
     return page && Number.isInteger(page) && page > 0 ? page : undefined;
   } catch {
     return undefined;

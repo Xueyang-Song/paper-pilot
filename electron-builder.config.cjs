@@ -15,7 +15,7 @@ const config = {
   productName: "Paper Pilot",
   npmRebuild: false,
   directories: {
-    output: "release",
+    output: "release"
   },
   artifactName: "Paper-Pilot-Setup-${version}.${ext}",
   files: ["dist/**/*", "dist-electron/**/*", "package.json"],
@@ -26,18 +26,18 @@ const config = {
       owner: "Xueyang-Song",
       repo: "paper-pilot",
       channel: "latest",
-      releaseType: "release",
-    },
+      releaseType: "release"
+    }
   ],
   win: {
-    target: "nsis",
+    target: "nsis"
   },
   mac: {
-    target: "dmg",
+    target: "dmg"
   },
   linux: {
-    target: "AppImage",
-  },
+    target: "AppImage"
+  }
 };
 
 if (signingEnabled) {
@@ -47,14 +47,12 @@ if (signingEnabled) {
     azureSignOptions: {
       publisherName: requireEnv("AZURE_SIGNING_PUBLISHER_NAME"),
       endpoint: requireEnv("AZURE_SIGNING_ENDPOINT"),
-      certificateProfileName: requireEnv(
-        "AZURE_SIGNING_CERTIFICATE_PROFILE_NAME",
-      ),
+      certificateProfileName: requireEnv("AZURE_SIGNING_CERTIFICATE_PROFILE_NAME"),
       codeSigningAccountName: requireEnv("AZURE_SIGNING_ACCOUNT_NAME"),
       fileDigest: "SHA256",
       timestampRfc3161: "http://timestamp.acs.microsoft.com",
-      timestampDigest: "SHA256",
-    },
+      timestampDigest: "SHA256"
+    }
   };
 }
 

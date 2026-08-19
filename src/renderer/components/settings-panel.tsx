@@ -18,7 +18,14 @@ import {
 } from "lucide-react";
 import type { JSX } from "react";
 import { useEffect, useMemo, useState } from "react";
-import type { AiProviderHealth, AppSettings, Project, SourceDefinition, SourceId, UpdateStatus } from "../../shared/schemas";
+import type {
+  AiProviderHealth,
+  AppSettings,
+  Project,
+  SourceDefinition,
+  SourceId,
+  UpdateStatus
+} from "../../shared/schemas";
 import { PanelSection, PolicyToggle } from "./ui";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -61,7 +68,10 @@ export function SettingsPanel({
 }): JSX.Element {
   const queryClient = useQueryClient();
   const settingsQuery = useQuery({ queryKey: ["settings"], queryFn: () => window.paperPilot.getSettings() });
-  const flagsQuery = useQuery({ queryKey: ["credentialFlags"], queryFn: () => window.paperPilot.listCredentialFlags() });
+  const flagsQuery = useQuery({
+    queryKey: ["credentialFlags"],
+    queryFn: () => window.paperPilot.listCredentialFlags()
+  });
   const updateQuery = useQuery({ queryKey: ["updates"], queryFn: () => window.paperPilot.getUpdateStatus() });
   const [selectedSource, setSelectedSource] = useState<SourceId | "ai-gateway">("ai-gateway");
   const [secret, setSecret] = useState("");
@@ -163,11 +173,12 @@ export function SettingsPanel({
     onSuccess: (status) => queryClient.setQueryData(["updates"], status)
   });
 
-  const flags = flagsQuery.data ?? [];
-  const credentialed = useMemo(() => new Set(flags.map((flag) => flag.sourceId)), [flags]);
+  const credentialed = useMemo(() => new Set((flagsQuery.data ?? []).map((flag) => flag.sourceId)), [flagsQuery.data]);
   const candidateHealth = checkProvider.data ?? aiHealth;
   const displayedHealth =
-    candidateHealth?.provider === provider && candidateHealth.baseUrl === baseUrl && candidateHealth.model === model ? candidateHealth : undefined;
+    candidateHealth?.provider === provider && candidateHealth.baseUrl === baseUrl && candidateHealth.model === model
+      ? candidateHealth
+      : undefined;
   const disabledSourceIds = new Set(settingsQuery.data?.sources.disabledSourceIds ?? []);
   const updateStatus = updateQuery.data;
   const updateBusy =
@@ -231,7 +242,10 @@ export function SettingsPanel({
                     </div>
                   </div>
                   {updateStatus?.state ? (
-                    <Badge variant={updateStatus.state === "failed" ? "destructive" : "outline"} className="shrink-0 capitalize">
+                    <Badge
+                      variant={updateStatus.state === "failed" ? "destructive" : "outline"}
+                      className="shrink-0 capitalize"
+                    >
                       {updateStatus.state.replace("-", " ")}
                     </Badge>
                   ) : null}
@@ -241,7 +255,9 @@ export function SettingsPanel({
                     <Progress value={updateStatus.downloadPercent ?? 0} />
                     <div className="mt-2 text-xs text-muted-foreground">
                       {formatPercent(updateStatus.downloadPercent)} downloaded
-                      {updateStatus.totalBytes ? ` / ${formatBytes(updateStatus.transferredBytes ?? 0)} of ${formatBytes(updateStatus.totalBytes)}` : ""}
+                      {updateStatus.totalBytes
+                        ? ` / ${formatBytes(updateStatus.transferredBytes ?? 0)} of ${formatBytes(updateStatus.totalBytes)}`
+                        : ""}
                     </div>
                   </div>
                 ) : null}
@@ -257,31 +273,63 @@ export function SettingsPanel({
                 {updateStatus?.state === "downloaded" ? (
                   <Alert className="mt-3 border-primary/40 bg-accent/45">
                     <AlertDescription>
-                      Version {updateStatus.availableVersion ?? "update"} is ready and will install the next time Paper Pilot restarts.
+                      Version {updateStatus.availableVersion ?? "update"} is ready and will install the next time Paper
+                      Pilot restarts.
                     </AlertDescription>
                   </Alert>
                 ) : null}
                 <div className="mt-3 grid grid-cols-2 gap-2">
                   {updateStatus?.state === "failed" ? (
-                    <Button type="button" variant="outline" onClick={() => checkForUpdates.mutate()} disabled={updateBusy}>
-                      {checkForUpdates.isPending ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => checkForUpdates.mutate()}
+                      disabled={updateBusy}
+                    >
+                      {checkForUpdates.isPending ? (
+                        <Loader2 size={14} className="animate-spin" />
+                      ) : (
+                        <RefreshCw size={14} />
+                      )}
                       Retry
                     </Button>
                   ) : updateStatus && ["idle", "not-available"].includes(updateStatus.state) ? (
-                    <Button type="button" variant="outline" onClick={() => checkForUpdates.mutate()} disabled={updateBusy}>
-                      {checkForUpdates.isPending ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => checkForUpdates.mutate()}
+                      disabled={updateBusy}
+                    >
+                      {checkForUpdates.isPending ? (
+                        <Loader2 size={14} className="animate-spin" />
+                      ) : (
+                        <RefreshCw size={14} />
+                      )}
                       Check
                     </Button>
                   ) : null}
                   {updateStatus?.state === "available" ? (
                     <Button type="button" onClick={() => downloadUpdate.mutate()} disabled={updateBusy}>
-                      {downloadUpdate.isPending ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+                      {downloadUpdate.isPending ? (
+                        <Loader2 size={14} className="animate-spin" />
+                      ) : (
+                        <Download size={14} />
+                      )}
                       Download
                     </Button>
                   ) : null}
                   {updateStatus?.state === "downloaded" ? (
-                    <Button type="button" onClick={() => installUpdateNow.mutate()} disabled={installUpdateNow.isPending} className="col-span-2">
-                      {installUpdateNow.isPending ? <Loader2 size={14} className="animate-spin" /> : <Power size={14} />}
+                    <Button
+                      type="button"
+                      onClick={() => installUpdateNow.mutate()}
+                      disabled={installUpdateNow.isPending}
+                      className="col-span-2"
+                    >
+                      {installUpdateNow.isPending ? (
+                        <Loader2 size={14} className="animate-spin" />
+                      ) : (
+                        <Power size={14} />
+                      )}
                       Restart and install
                     </Button>
                   ) : null}
@@ -297,7 +345,10 @@ export function SettingsPanel({
 
             <PanelSection icon={<Brain size={17} />} title="AI Provider">
               <FieldLabel>Provider</FieldLabel>
-              <Select value={provider} onValueChange={(value) => changeProvider(value as AppSettings["ai"]["provider"])}>
+              <Select
+                value={provider}
+                onValueChange={(value) => changeProvider(value as AppSettings["ai"]["provider"])}
+              >
                 <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
@@ -330,8 +381,17 @@ export function SettingsPanel({
                   {saveSettings.isPending ? <Loader2 size={14} className="animate-spin" /> : null}
                   Save AI settings
                 </Button>
-                <Button type="button" variant="outline" onClick={() => checkProvider.mutate()} disabled={checkProvider.isPending}>
-                  {checkProvider.isPending ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => checkProvider.mutate()}
+                  disabled={checkProvider.isPending}
+                >
+                  {checkProvider.isPending ? (
+                    <Loader2 size={14} className="animate-spin" />
+                  ) : (
+                    <CheckCircle2 size={14} />
+                  )}
                   Check
                 </Button>
               </div>
@@ -363,7 +423,12 @@ export function SettingsPanel({
                   {reindexSearch.isPending ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
                   Project
                 </Button>
-                <Button type="button" variant="outline" onClick={() => reindexSearch.mutate(undefined)} disabled={reindexSearch.isPending}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => reindexSearch.mutate(undefined)}
+                  disabled={reindexSearch.isPending}
+                >
                   {reindexSearch.isPending ? <Loader2 size={14} className="animate-spin" /> : <Database size={14} />}
                   All
                 </Button>
@@ -387,13 +452,21 @@ export function SettingsPanel({
             </PanelSection>
 
             <PanelSection icon={<Database size={17} />} title="Data">
-              <Button type="button" variant="outline" onClick={() => void window.paperPilot.openDataFolder()} className="w-full">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void window.paperPilot.openDataFolder()}
+                className="w-full"
+              >
                 Open data folder
               </Button>
             </PanelSection>
 
             <PanelSection icon={<KeyRound size={17} />} title="Credentials">
-              <Select value={selectedSource} onValueChange={(value) => setSelectedSource(value as SourceId | "ai-gateway")}>
+              <Select
+                value={selectedSource}
+                onValueChange={(value) => setSelectedSource(value as SourceId | "ai-gateway")}
+              >
                 <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
@@ -413,20 +486,35 @@ export function SettingsPanel({
                 type="password"
                 placeholder={credentialed.has(selectedSource) ? "Stored" : "Not configured"}
               />
-              <Button type="button" onClick={() => saveCredential.mutate()} disabled={!secret.trim() || saveCredential.isPending} className="w-full">
+              <Button
+                type="button"
+                onClick={() => saveCredential.mutate()}
+                disabled={!secret.trim() || saveCredential.isPending}
+                className="w-full"
+              >
                 {saveCredential.isPending ? <Loader2 size={14} className="animate-spin" /> : null}
                 Save credential
               </Button>
               <div className="grid grid-cols-2 gap-2">
-                <Button type="button" variant="outline" onClick={() => testCredential.mutate()} disabled={testCredential.isPending}>
-                  {testCredential.isPending ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => testCredential.mutate()}
+                  disabled={testCredential.isPending}
+                >
+                  {testCredential.isPending ? (
+                    <Loader2 size={14} className="animate-spin" />
+                  ) : (
+                    <CheckCircle2 size={14} />
+                  )}
                   Test
                 </Button>
                 <Button
                   type="button"
                   variant="destructive"
                   onClick={() => {
-                    if (window.confirm(`Remove the stored credential for ${selectedSource}?`)) removeCredential.mutate();
+                    if (window.confirm(`Remove the stored credential for ${selectedSource}?`))
+                      removeCredential.mutate();
                   }}
                   disabled={!credentialed.has(selectedSource) || removeCredential.isPending}
                 >
@@ -451,7 +539,9 @@ export function SettingsPanel({
                         <div className="mt-1 text-xs text-muted-foreground">{source.kind}</div>
                       </div>
                       <div className="flex shrink-0 items-center gap-2">
-                        <Badge variant={source.stable ? "secondary" : "destructive"}>{source.stable ? "stable" : "experimental"}</Badge>
+                        <Badge variant={source.stable ? "secondary" : "destructive"}>
+                          {source.stable ? "stable" : "experimental"}
+                        </Badge>
                         <label className="inline-flex items-center gap-2 text-xs text-muted-foreground">
                           <Checkbox
                             checked={!disabledSourceIds.has(source.id)}
@@ -472,7 +562,9 @@ export function SettingsPanel({
                 <ToggleGroup
                   type="single"
                   value={activeProject.policy.autonomy}
-                  onValueChange={(value) => value && updatePolicy.mutate({ autonomy: value as Project["policy"]["autonomy"] })}
+                  onValueChange={(value) =>
+                    value && updatePolicy.mutate({ autonomy: value as Project["policy"]["autonomy"] })
+                  }
                   variant="outline"
                   className="grid w-full grid-cols-3"
                 >

@@ -206,14 +206,9 @@ export const crawlConfigSchema = z.object({
   dateFrom: z.string().optional(),
   dateTo: z.string().optional(),
   maxPapers: z.number().int().positive().max(500).default(25),
-  sourceIds: z.array(sourceIdSchema).default([
-    "openalex",
-    "crossref",
-    "semantic-scholar",
-    "arxiv",
-    "europe-pmc",
-    "pubmed"
-  ]),
+  sourceIds: z
+    .array(sourceIdSchema)
+    .default(["openalex", "crossref", "semantic-scholar", "arxiv", "europe-pmc", "pubmed"]),
   sort: z.enum(["relevance", "newest", "cited"]).default("relevance"),
   openAccessOnly: z.boolean().default(true),
   allowBrowserFallback: z.boolean().default(false),

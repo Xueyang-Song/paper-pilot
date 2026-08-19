@@ -1,5 +1,19 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Archive, CheckSquare, Download, FilePlus2, Info, Loader2, Pencil, RefreshCw, Save, Square, Star, Trash2, X } from "lucide-react";
+import {
+  Archive,
+  CheckSquare,
+  Download,
+  FilePlus2,
+  Info,
+  Loader2,
+  Pencil,
+  RefreshCw,
+  Save,
+  Square,
+  Star,
+  Trash2,
+  X
+} from "lucide-react";
 import type { JSX } from "react";
 import { useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -71,7 +85,9 @@ export function ArtifactPanel({
   });
   const artifactRows = useMemo(() => buildArtifactRows(artifacts, papers), [artifacts, papers]);
   const scoredCount = papers.filter((paper) => Boolean(paper.score)).length;
-  const selectedArtifactIds = [...selectedIds].filter((artifactId) => artifacts.some((artifact) => artifact.id === artifactId));
+  const selectedArtifactIds = [...selectedIds].filter((artifactId) =>
+    artifacts.some((artifact) => artifact.id === artifactId)
+  );
   const allVisibleSelected = artifactRows.length > 0 && artifactRows.every((row) => selectedIds.has(row.artifact.id));
   function toggleSelected(artifactId: string): void {
     setSelectedIds((current) => {
@@ -88,104 +104,106 @@ export function ArtifactPanel({
         <Archive size={16} className="text-muted-foreground" />
       </div>
       <ScrollArea className="min-h-0 min-w-0 w-full flex-1">
-      <div className="min-w-0 p-3 pr-4">
-        <div className="mb-3 grid grid-cols-2 gap-2">
-          <Metric label="Papers" value={papers.length} />
-          <Metric label="Files" value={artifacts.length} />
-        </div>
-        <Card className="mb-3 w-full max-w-full min-w-0 rounded-lg border-border bg-card p-2 py-2 shadow-sm">
-          <div className="mb-2 flex min-w-0 items-center justify-between gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() =>
-                setSelectedIds(allVisibleSelected ? new Set() : new Set(artifactRows.map((row) => row.artifact.id)))
-              }
-            >
-              {allVisibleSelected ? <CheckSquare size={13} /> : <Square size={13} />}
-              {selectedArtifactIds.length ? `${selectedArtifactIds.length} selected` : "Select"}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => importArtifacts.mutate()}
-              disabled={!projectId || importArtifacts.isPending}
-            >
-              {importArtifacts.isPending ? <Loader2 size={13} className="animate-spin" /> : <FilePlus2 size={13} />}
-              Import
-            </Button>
+        <div className="min-w-0 p-3 pr-4">
+          <div className="mb-3 grid grid-cols-2 gap-2">
+            <Metric label="Papers" value={papers.length} />
+            <Metric label="Files" value={artifacts.length} />
           </div>
-          <div className="grid grid-cols-3 gap-1">
-            <BulkButton
-              label="Export"
-              icon={<Download size={13} />}
-              disabled={!selectedArtifactIds.length || exportArtifacts.isPending}
-              onClick={() => exportArtifacts.mutate(selectedArtifactIds)}
-            />
-            <BulkButton
-              label="Reindex"
-              icon={reindexArtifacts.isPending ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
-              disabled={!selectedArtifactIds.length || reindexArtifacts.isPending}
-              onClick={() => reindexArtifacts.mutate(selectedArtifactIds)}
-            />
-            <BulkButton
-              label="Delete"
-              icon={<Trash2 size={13} />}
-              danger
-              disabled={!selectedArtifactIds.length || deleteArtifacts.isPending}
-              onClick={() => {
-                if (window.confirm(`Delete ${selectedArtifactIds.length} selected file(s)?`)) {
-                  deleteArtifacts.mutate(selectedArtifactIds);
+          <Card className="mb-3 w-full max-w-full min-w-0 rounded-lg border-border bg-card p-2 py-2 shadow-sm">
+            <div className="mb-2 flex min-w-0 items-center justify-between gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setSelectedIds(allVisibleSelected ? new Set() : new Set(artifactRows.map((row) => row.artifact.id)))
                 }
-              }}
-            />
-          </div>
-        </Card>
-        <Card className="mb-3 w-full max-w-full min-w-0 flex-row items-center justify-between gap-2 rounded-lg border-border bg-card p-3 py-3 shadow-sm">
-          <div className="min-w-0">
-            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Scores</div>
-            <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
-              {scoredCount}/{papers.length} papers scored
+              >
+                {allVisibleSelected ? <CheckSquare size={13} /> : <Square size={13} />}
+                {selectedArtifactIds.length ? `${selectedArtifactIds.length} selected` : "Select"}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => importArtifacts.mutate()}
+                disabled={!projectId || importArtifacts.isPending}
+              >
+                {importArtifacts.isPending ? <Loader2 size={13} className="animate-spin" /> : <FilePlus2 size={13} />}
+                Import
+              </Button>
             </div>
-          </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => scorePapers.mutate()}
-            disabled={!projectId || !papers.length || scorePapers.isPending}
-          >
-            {scorePapers.isPending ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
-            Score
-          </Button>
-        </Card>
-        {scorePapers.isError ? (
-          <div className="mb-3 rounded-lg border border-destructive/40 bg-card px-3 py-2 text-xs text-destructive">
-            Could not score papers. {scorePapers.error.message}
-          </div>
-        ) : null}
-        <div className="flex min-w-0 flex-col gap-2">
-          {artifactRows.map(({ artifact, scoreTarget, sourceLabel }) => (
-            <ArtifactFileCard
-              key={artifact.id}
-              artifact={artifact}
-              scoreTarget={scoreTarget}
-              sourceLabel={sourceLabel}
-              projectId={projectId}
-              selected={selectedIds.has(artifact.id)}
-              onToggleSelected={() => toggleSelected(artifact.id)}
-              onOpenArtifact={onOpenArtifact}
-            />
-          ))}
-          {!artifacts.length ? (
-            <div className="rounded-lg border border-dashed border-border bg-card/70 p-4 text-sm text-muted-foreground">
-              Crawl outputs, Markdown conversions, logs, and briefs appear here.
+            <div className="grid grid-cols-3 gap-1">
+              <BulkButton
+                label="Export"
+                icon={<Download size={13} />}
+                disabled={!selectedArtifactIds.length || exportArtifacts.isPending}
+                onClick={() => exportArtifacts.mutate(selectedArtifactIds)}
+              />
+              <BulkButton
+                label="Reindex"
+                icon={
+                  reindexArtifacts.isPending ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />
+                }
+                disabled={!selectedArtifactIds.length || reindexArtifacts.isPending}
+                onClick={() => reindexArtifacts.mutate(selectedArtifactIds)}
+              />
+              <BulkButton
+                label="Delete"
+                icon={<Trash2 size={13} />}
+                danger
+                disabled={!selectedArtifactIds.length || deleteArtifacts.isPending}
+                onClick={() => {
+                  if (window.confirm(`Delete ${selectedArtifactIds.length} selected file(s)?`)) {
+                    deleteArtifacts.mutate(selectedArtifactIds);
+                  }
+                }}
+              />
+            </div>
+          </Card>
+          <Card className="mb-3 w-full max-w-full min-w-0 flex-row items-center justify-between gap-2 rounded-lg border-border bg-card p-3 py-3 shadow-sm">
+            <div className="min-w-0">
+              <div className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Scores</div>
+              <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                {scoredCount}/{papers.length} papers scored
+              </div>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => scorePapers.mutate()}
+              disabled={!projectId || !papers.length || scorePapers.isPending}
+            >
+              {scorePapers.isPending ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+              Score
+            </Button>
+          </Card>
+          {scorePapers.isError ? (
+            <div className="mb-3 rounded-lg border border-destructive/40 bg-card px-3 py-2 text-xs text-destructive">
+              Could not score papers. {scorePapers.error.message}
             </div>
           ) : null}
+          <div className="flex min-w-0 flex-col gap-2">
+            {artifactRows.map(({ artifact, scoreTarget, sourceLabel }) => (
+              <ArtifactFileCard
+                key={artifact.id}
+                artifact={artifact}
+                scoreTarget={scoreTarget}
+                sourceLabel={sourceLabel}
+                projectId={projectId}
+                selected={selectedIds.has(artifact.id)}
+                onToggleSelected={() => toggleSelected(artifact.id)}
+                onOpenArtifact={onOpenArtifact}
+              />
+            ))}
+            {!artifacts.length ? (
+              <div className="rounded-lg border border-dashed border-border bg-card/70 p-4 text-sm text-muted-foreground">
+                Crawl outputs, Markdown conversions, logs, and briefs appear here.
+              </div>
+            ) : null}
+          </div>
         </div>
-      </div>
       </ScrollArea>
     </aside>
   );
@@ -264,14 +282,14 @@ function ArtifactFileCard({
             onClick={() => onOpenArtifact(artifact.id)}
             className="flex min-w-0 flex-1 items-start gap-2 overflow-hidden text-left"
           >
-          <ArtifactIcon artifact={artifact} className="mt-0.5 shrink-0 text-primary" />
-          <span className="min-w-0 flex-1 overflow-hidden">
-            <span className="block truncate text-sm font-medium">{artifact.title}</span>
-            <span className="mt-0.5 flex min-w-0 flex-wrap gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
-              <span>{artifact.type}</span>
-              {sourceLabel ? <span className="truncate">From {sourceLabel}</span> : null}
+            <ArtifactIcon artifact={artifact} className="mt-0.5 shrink-0 text-primary" />
+            <span className="min-w-0 flex-1 overflow-hidden">
+              <span className="block truncate text-sm font-medium">{artifact.title}</span>
+              <span className="mt-0.5 flex min-w-0 flex-wrap gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+                <span>{artifact.type}</span>
+                {sourceLabel ? <span className="truncate">From {sourceLabel}</span> : null}
+              </span>
             </span>
-          </span>
           </button>
         )}
       </div>
@@ -297,35 +315,37 @@ function ArtifactFileCard({
           </TinyIcon>
         )}
         <ArtifactScoreControl target={scoreTarget} />
-      {scoreTarget?.paper ? (
-        <>
-          <TinyIcon
-            label={scoreTarget.paper.favorite ? "Remove favorite" : "Favorite paper"}
-            active={scoreTarget.paper.favorite}
-            onClick={() => updatePaper.mutate({ favorite: !scoreTarget.paper?.favorite })}
-          >
-            <Star size={12} />
-          </TinyIcon>
-          <Select
-            value={scoreTarget.paper.userStatus ?? "unread"}
-            onValueChange={(value) => updatePaper.mutate({ userStatus: value as Paper["userStatus"] })}
-          >
-            <SelectTrigger size="sm" className="h-7 w-32 min-w-0">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="unread">Unread</SelectItem>
-              <SelectItem value="to-read">To read</SelectItem>
-              <SelectItem value="reading">Reading</SelectItem>
-              <SelectItem value="read">Read</SelectItem>
-              <SelectItem value="rejected">Rejected</SelectItem>
-            </SelectContent>
-          </Select>
-          {scoreTarget.paper.tags?.length ? (
-            <span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">{scoreTarget.paper.tags.slice(0, 2).join(", ")}</span>
-          ) : null}
-        </>
-      ) : null}
+        {scoreTarget?.paper ? (
+          <>
+            <TinyIcon
+              label={scoreTarget.paper.favorite ? "Remove favorite" : "Favorite paper"}
+              active={scoreTarget.paper.favorite}
+              onClick={() => updatePaper.mutate({ favorite: !scoreTarget.paper?.favorite })}
+            >
+              <Star size={12} />
+            </TinyIcon>
+            <Select
+              value={scoreTarget.paper.userStatus ?? "unread"}
+              onValueChange={(value) => updatePaper.mutate({ userStatus: value as Paper["userStatus"] })}
+            >
+              <SelectTrigger size="sm" className="h-7 w-32 min-w-0">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="unread">Unread</SelectItem>
+                <SelectItem value="to-read">To read</SelectItem>
+                <SelectItem value="reading">Reading</SelectItem>
+                <SelectItem value="read">Read</SelectItem>
+                <SelectItem value="rejected">Rejected</SelectItem>
+              </SelectContent>
+            </Select>
+            {scoreTarget.paper.tags?.length ? (
+              <span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">
+                {scoreTarget.paper.tags.slice(0, 2).join(", ")}
+              </span>
+            ) : null}
+          </>
+        ) : null}
       </div>
     </Card>
   );
@@ -373,14 +393,19 @@ export function ArtifactScoreControl({ target }: { target?: ArtifactScoreTarget 
         >
           <Info size={13} />
         </Button>
-        {popoverPosition ? createPortal(<ScoreDetailsPopover target={target} position={popoverPosition} />, document.body) : null}
+        {popoverPosition
+          ? createPortal(<ScoreDetailsPopover target={target} position={popoverPosition} />, document.body)
+          : null}
       </div>
     </div>
   );
 }
 export function ScoreChip({ score }: { score?: PaperScore }): JSX.Element {
   return (
-    <Badge variant="outline" className={`h-7 rounded-lg px-2 text-xs font-semibold tabular-nums ${scoreBadgeClasses(score?.label)}`}>
+    <Badge
+      variant="outline"
+      className={`h-7 rounded-lg px-2 text-xs font-semibold tabular-nums ${scoreBadgeClasses(score?.label)}`}
+    >
       {score ? Math.round(score.overall) : "--"}
     </Badge>
   );
@@ -390,7 +415,13 @@ interface ScorePopoverPosition {
   top: number;
 }
 
-function ScoreDetailsPopover({ target, position }: { target: ArtifactScoreTarget; position: ScorePopoverPosition }): JSX.Element {
+function ScoreDetailsPopover({
+  target,
+  position
+}: {
+  target: ArtifactScoreTarget;
+  position: ScorePopoverPosition;
+}): JSX.Element {
   const score = target.score;
   return (
     <div
@@ -406,7 +437,9 @@ function ScoreDetailsPopover({ target, position }: { target: ArtifactScoreTarget
       </div>
       {score ? (
         <>
-          <div className="mb-2 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">{score.label}</div>
+          <div className="mb-2 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+            {score.label}
+          </div>
           <div className="space-y-1.5">
             {scoreComponentRows(score).map((component) => (
               <ScoreBar key={component.label} label={component.label} value={component.value} />
@@ -421,7 +454,9 @@ function ScoreDetailsPopover({ target, position }: { target: ArtifactScoreTarget
           </div>
         </>
       ) : (
-        <div className="text-[11px] leading-4 text-muted-foreground">Run Score to calculate paper quality details for this file.</div>
+        <div className="text-[11px] leading-4 text-muted-foreground">
+          Run Score to calculate paper quality details for this file.
+        </div>
       )}
     </div>
   );

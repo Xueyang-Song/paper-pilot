@@ -38,9 +38,14 @@ describe("crawler request helpers", () => {
   });
 
   it("classifies malformed JSON as a readable crawler error", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response("{not-json", { status: 200 })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("{not-json", { status: 200 }))
+    );
 
-    await expect(getJson(new URL("https://example.test/api"), { retries: 0 })).rejects.toThrow("Malformed JSON response");
+    await expect(getJson(new URL("https://example.test/api"), { retries: 0 })).rejects.toThrow(
+      "Malformed JSON response"
+    );
   });
 
   it("retries timeout-style failures", async () => {
@@ -109,7 +114,12 @@ describe("crawler diagnostics", () => {
     const metadata = db.listArtifacts(project.id).find((artifact) => artifact.type === "metadata-json");
     const digest = db.listArtifacts(project.id).find((artifact) => artifact.type === "markdown");
     expect(metadata?.metadata.sourceDiagnostics).toEqual([
-      expect.objectContaining({ sourceId: "openalex", status: "warning", paperCount: 1, attemptedUrl: "https://example.test/search" })
+      expect.objectContaining({
+        sourceId: "openalex",
+        status: "warning",
+        paperCount: 1,
+        attemptedUrl: "https://example.test/search"
+      })
     ]);
     expect((await artifacts.readArtifact(digest!)).toString("utf8")).toContain("Source Diagnostics");
   });
@@ -117,7 +127,9 @@ describe("crawler diagnostics", () => {
 
 describe("BrowserCrawlerService diagnostics", () => {
   it("parses successful multi-result browser output", async () => {
-    const crawler = new BrowserCrawlerService(fakePython(JSON.stringify({ papers: [paper("One"), paper("Two")], warnings: [] })));
+    const crawler = new BrowserCrawlerService(
+      fakePython(JSON.stringify({ papers: [paper("One"), paper("Two")], warnings: [] }))
+    );
 
     const result = await crawler.runGoogleScholar("proj", browserConfig());
 
@@ -127,7 +139,9 @@ describe("BrowserCrawlerService diagnostics", () => {
 
   it("returns blocked-page warnings from browser output", async () => {
     const crawler = new BrowserCrawlerService(
-      fakePython(JSON.stringify({ papers: [], warnings: ["Google Scholar returned an anti-automation or CAPTCHA page."] }))
+      fakePython(
+        JSON.stringify({ papers: [], warnings: ["Google Scholar returned an anti-automation or CAPTCHA page."] })
+      )
     );
 
     const result = await crawler.runGoogleScholar("proj", browserConfig());

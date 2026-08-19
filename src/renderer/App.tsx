@@ -2,7 +2,6 @@ import { QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient
 import { atom, useAtom } from "jotai";
 import type { JSX } from "react";
 import { useEffect, useState } from "react";
-import { createRoot } from "react-dom/client";
 import type { AppSettings, Job } from "../shared/schemas";
 import { ArtifactPanel, ArtifactViewerModal } from "./components/artifacts";
 import { ChatWorkspace } from "./components/chat-workspace";
@@ -13,14 +12,13 @@ import { SettingsPanel } from "./components/settings-panel";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { WindowTitleBar } from "./components/window-title-bar";
-import "./styles.css";
 
 const queryClient = new QueryClient();
 const activeProjectIdAtom = atom<string | undefined>(undefined);
 type ThemePreference = AppSettings["ui"]["theme"];
 type ResolvedTheme = Exclude<ThemePreference, "system">;
 
-function Root(): JSX.Element {
+export function Root(): JSX.Element {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider delayDuration={250}>
@@ -31,7 +29,7 @@ function Root(): JSX.Element {
   );
 }
 
-function App(): JSX.Element {
+export function App(): JSX.Element {
   const [activeProjectId, setActiveProjectId] = useAtom(activeProjectIdAtom);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -88,7 +86,13 @@ function App(): JSX.Element {
   }, [resolvedTheme]);
 
   const aiHealthQuery = useQuery({
-    queryKey: ["ai-health", settingsQuery.data?.ai.provider, settingsQuery.data?.ai.baseUrl, settingsQuery.data?.ai.model, settingsQuery.data?.ai.hasApiKey],
+    queryKey: [
+      "ai-health",
+      settingsQuery.data?.ai.provider,
+      settingsQuery.data?.ai.baseUrl,
+      settingsQuery.data?.ai.model,
+      settingsQuery.data?.ai.hasApiKey
+    ],
     queryFn: () => window.paperPilot.checkAiProvider(),
     enabled: Boolean(settingsQuery.data)
   });
@@ -101,19 +105,9 @@ function App(): JSX.Element {
     }
   });
 
-  const renameProject = useMutation({
-    mutationFn: (input: { projectId: string; title: string }) => window.paperPilot.renameProject(input),
-    onSuccess: (project) => {
-      queryClient.setQueryData(["bundle", project.id], (bundle: typeof bundleQuery.data) =>
-        bundle?.project.id === project.id ? { ...bundle, project } : bundle
-      );
-      void queryClient.invalidateQueries({ queryKey: ["projects"] });
-      void queryClient.invalidateQueries({ queryKey: ["bundle", project.id] });
-    }
-  });
-
   const updateProject = useMutation({
-    mutationFn: (input: { projectId: string; title?: string; topic?: string; description?: string }) => window.paperPilot.updateProject(input),
+    mutationFn: (input: { projectId: string; title?: string; topic?: string; description?: string }) =>
+      window.paperPilot.updateProject(input),
     onSuccess: (project) => {
       queryClient.setQueryData(["bundle", project.id], (bundle: typeof bundleQuery.data) =>
         bundle?.project.id === project.id ? { ...bundle, project } : bundle
@@ -201,7 +195,6 @@ function App(): JSX.Element {
           activeProjectId={activeProjectId}
           onSelect={setActiveProjectId}
           onCreate={() => createProject.mutate()}
-          onRename={(projectId, title) => renameProject.mutateAsync({ projectId, title })}
           onUpdate={(input) => updateProject.mutateAsync(input)}
           onPin={(projectId, pinned) => pinProject.mutateAsync({ projectId, pinned })}
           onArchive={(projectId, archived) => archiveProject.mutateAsync({ projectId, archived })}
@@ -212,7 +205,11 @@ function App(): JSX.Element {
         />
         <section className="relative flex min-h-0 min-w-0 flex-col border-l border-border bg-card">
           <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(300px,340px)] overflow-hidden">
-            <ChatWorkspace bundle={activeBundle} activeProjectId={activeProjectId} onProjectCreated={setActiveProjectId} />
+            <ChatWorkspace
+              bundle={activeBundle}
+              activeProjectId={activeProjectId}
+              onProjectCreated={setActiveProjectId}
+            />
             <ArtifactPanel
               projectId={activeProjectId}
               artifacts={artifacts}
@@ -277,7 +274,9 @@ function App(): JSX.Element {
 }
 
 function useResolvedTheme(preference: ThemePreference): ResolvedTheme {
-  const [systemPrefersDark, setSystemPrefersDark] = useState(() => window.matchMedia("(prefers-color-scheme: dark)").matches);
+  const [systemPrefersDark, setSystemPrefersDark] = useState(
+    () => window.matchMedia("(prefers-color-scheme: dark)").matches
+  );
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
@@ -290,5 +289,3 @@ function useResolvedTheme(preference: ThemePreference): ResolvedTheme {
   if (preference === "system") return systemPrefersDark ? "dark" : "light";
   return preference;
 }
-
-createRoot(document.getElementById("root")!).render(<Root />);

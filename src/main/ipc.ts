@@ -133,7 +133,9 @@ export function registerIpc(services: IpcServices): void {
   });
 
   ipcMain.handle("projects:duplicate", async (_event, input: unknown) => {
-    const parsed = z.object({ projectId: z.string(), title: z.string().trim().min(1).max(120).optional() }).parse(input);
+    const parsed = z
+      .object({ projectId: z.string(), title: z.string().trim().min(1).max(120).optional() })
+      .parse(input);
     const project = services.db.getProject(parsed.projectId);
     if (!project) throw new Error(`Project not found: ${parsed.projectId}`);
     return copyProject(services, parsed.projectId, parsed.title ?? `Copy of ${project.title}`);
@@ -198,7 +200,9 @@ export function registerIpc(services: IpcServices): void {
 
   ipcMain.handle("settings:get", () => services.settings.get());
 
-  ipcMain.handle("settings:update", (_event, input: unknown) => services.settings.update(appSettingsSchema.partial().parse(input)));
+  ipcMain.handle("settings:update", (_event, input: unknown) =>
+    services.settings.update(appSettingsSchema.partial().parse(input))
+  );
 
   ipcMain.handle("app:openDataFolder", async () => {
     const error = await shell.openPath(services.dataRoot);
@@ -244,7 +248,9 @@ export function registerIpc(services: IpcServices): void {
     return services.ai.generateResearchBrief(parsed.projectId, parsed.prompt);
   });
 
-  ipcMain.handle("ai:checkProvider", (_event, input: unknown) => services.ai.checkProvider(aiProviderCheckRequestSchema.parse(input)));
+  ipcMain.handle("ai:checkProvider", (_event, input: unknown) =>
+    services.ai.checkProvider(aiProviderCheckRequestSchema.parse(input))
+  );
 
   ipcMain.handle("papers:score", (_event, input: unknown) => {
     const parsed = z.object({ projectId: z.string() }).parse(input);
@@ -264,7 +270,11 @@ export function registerIpc(services: IpcServices): void {
 
   ipcMain.handle("papers:exportCitations", async (_event, input: unknown) => {
     const parsed = z
-      .object({ projectId: z.string(), paperIds: z.array(z.string()).optional(), format: z.enum(["bibtex", "ris", "csv"]).default("bibtex") })
+      .object({
+        projectId: z.string(),
+        paperIds: z.array(z.string()).optional(),
+        format: z.enum(["bibtex", "ris", "csv"]).default("bibtex")
+      })
       .parse(input);
     const papers = services.db
       .listPapers(parsed.projectId)
@@ -283,7 +293,9 @@ export function registerIpc(services: IpcServices): void {
 
   ipcMain.handle("search:run", (_event, input: unknown) => services.search.search(searchRequestSchema.parse(input)));
 
-  ipcMain.handle("search:reindex", (_event, input: unknown) => services.search.reindex(reindexRequestSchema.parse(input ?? {})));
+  ipcMain.handle("search:reindex", (_event, input: unknown) =>
+    services.search.reindex(reindexRequestSchema.parse(input ?? {}))
+  );
 
   ipcMain.handle("artifacts:read", async (_event, input: unknown) => {
     const parsed = z.object({ projectId: z.string(), artifactId: z.string() }).parse(input);
@@ -342,7 +354,11 @@ export function registerIpc(services: IpcServices): void {
     });
     const targetDir = result.filePaths[0];
     if (result.canceled || !targetDir) return { ok: false };
-    const exported = await services.artifacts.exportArtifacts({ projectId: parsed.projectId, artifactIds: parsed.artifactIds, targetDir });
+    const exported = await services.artifacts.exportArtifacts({
+      projectId: parsed.projectId,
+      artifactIds: parsed.artifactIds,
+      targetDir
+    });
     return { ok: true, ...exported };
   });
 
@@ -405,10 +421,17 @@ export function registerIpc(services: IpcServices): void {
         parentArtifactId: z.string().optional()
       })
       .parse(input);
-    return services.python.convertWithMarkItDown(parsed.projectId, parsed.sourcePath, parsed.approved, parsed.parentArtifactId);
+    return services.python.convertWithMarkItDown(
+      parsed.projectId,
+      parsed.sourcePath,
+      parsed.approved,
+      parsed.parentArtifactId
+    );
   });
 
-  ipcMain.handle("jobs:list", (_event, projectId: unknown) => services.jobs.list(typeof projectId === "string" ? projectId : undefined));
+  ipcMain.handle("jobs:list", (_event, projectId: unknown) =>
+    services.jobs.list(typeof projectId === "string" ? projectId : undefined)
+  );
 
   ipcMain.handle("jobs:approve", async (_event, jobIdInput: unknown) => {
     const jobId = z.string().parse(jobIdInput);
@@ -528,7 +551,12 @@ async function copyProject(services: IpcServices, projectId: string, title: stri
 
 async function importProjectBundle(services: IpcServices, bundle: ProjectExportBundle) {
   if (!bundle.project) throw new Error("Project bundle is missing project metadata.");
-  const project = services.db.createProject(bundle.project.title, bundle.project.topic, bundle.project.policy, bundle.project.description);
+  const project = services.db.createProject(
+    bundle.project.title,
+    bundle.project.topic,
+    bundle.project.policy,
+    bundle.project.description
+  );
   if (bundle.project.pinnedAt) services.db.setProjectPinned(project.id, true);
   const paperIdMap = new Map<string, string>();
   for (const paperInput of bundle.papers ?? []) {
@@ -541,7 +569,9 @@ async function importProjectBundle(services: IpcServices, bundle: ProjectExportB
     const metadata = { ...(artifactInput.metadata ?? {}) };
     const paperId = typeof metadata.paperId === "string" ? paperIdMap.get(metadata.paperId) : undefined;
     if (paperId) metadata.paperId = paperId;
-    const parentArtifactId = artifactInput.parentArtifactId ? artifactIdMap.get(artifactInput.parentArtifactId) : undefined;
+    const parentArtifactId = artifactInput.parentArtifactId
+      ? artifactIdMap.get(artifactInput.parentArtifactId)
+      : undefined;
     const artifact = await services.artifacts.writeArtifact({
       projectId: project.id,
       type: artifactInput.type,
@@ -616,7 +646,13 @@ function renderCitationExport(papers: Paper[], format: "bibtex" | "ris" | "csv")
 }
 
 function artifactSourceUrl(artifact: Artifact): string | undefined {
-  const candidates = [artifact.metadata.url, artifact.metadata.pdfUrl, artifact.metadata.sourceUrl, artifact.metadata.doi, artifact.source];
+  const candidates = [
+    artifact.metadata.url,
+    artifact.metadata.pdfUrl,
+    artifact.metadata.sourceUrl,
+    artifact.metadata.doi,
+    artifact.source
+  ];
   for (const candidate of candidates) {
     if (typeof candidate !== "string" || !candidate.trim()) continue;
     if (/^https?:\/\//i.test(candidate)) return candidate;

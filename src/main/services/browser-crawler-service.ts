@@ -34,7 +34,9 @@ export class BrowserCrawlerService {
     } catch (error) {
       return {
         papers: [],
-        warnings: [`Google Scholar browser crawl returned malformed JSON: ${error instanceof Error ? error.message : String(error)}`]
+        warnings: [
+          `Google Scholar browser crawl returned malformed JSON: ${error instanceof Error ? error.message : String(error)}`
+        ]
       };
     }
   }
@@ -56,7 +58,7 @@ function classifyBrowserFailure(output: string): string | undefined {
   if (/Executable doesn't exist|playwright install|browserType\.launch|chromium.*not.*found/i.test(output)) {
     return "Playwright Chromium is not installed or could not be found. Use the browser install approval flow and retry.";
   }
-  if (/No module named ['\"]?playwright|ModuleNotFoundError|pip.*install.*playwright/i.test(output)) {
+  if (/No module named ['"]?playwright|ModuleNotFoundError|pip.*install.*playwright/i.test(output)) {
     return "The Playwright Python package is missing or failed to install.";
   }
   if (/TargetClosedError|host system is missing dependencies|browser.*launch|failed to launch/i.test(output)) {

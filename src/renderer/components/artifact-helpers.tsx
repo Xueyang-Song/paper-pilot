@@ -110,14 +110,20 @@ function averagePaperScore(papers: Paper[]): PaperScore | undefined {
     label: scoreLabel(overall),
     components,
     reasons: [`Average across ${scored.length} scored papers.`, `Top paper: ${topPaper.title}.`],
-    scoredAt: scored.map((paper) => paper.score.scoredAt).sort().at(-1) ?? new Date().toISOString(),
+    scoredAt:
+      scored
+        .map((paper) => paper.score.scoredAt)
+        .sort()
+        .at(-1) ?? new Date().toISOString(),
     version: "aggregate"
   };
 }
 function scoredPaperCount(papers: Paper[]): number {
   return papers.filter((paper) => Boolean(paper.score)).length;
 }
-export function scoreComponentRows(score: PaperScore): Array<{ key: keyof PaperScore["components"]; label: string; value: number }> {
+export function scoreComponentRows(
+  score: PaperScore
+): Array<{ key: keyof PaperScore["components"]; label: string; value: number }> {
   return [
     { key: "citations", label: "Citations", value: score.components.citations },
     { key: "venue", label: "Venue", value: score.components.venue },
@@ -142,7 +148,10 @@ function metadataString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 function normalizeDoi(value: string | undefined): string | undefined {
-  return value?.toLowerCase().replace(/^https?:\/\/(dx\.)?doi\.org\//, "").trim();
+  return value
+    ?.toLowerCase()
+    .replace(/^https?:\/\/(dx\.)?doi\.org\//, "")
+    .trim();
 }
 function normalizeCardTitle(value: string): string {
   return value

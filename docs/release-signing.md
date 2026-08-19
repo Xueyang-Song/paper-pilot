@@ -65,8 +65,8 @@ Store `$credential.password` as the `AZURE_CLIENT_SECRET` GitHub environment sec
 Create a GitHub environment named `release`.
 
 - Do not require manual reviewers unless you want releases to pause before signing.
-- Restrict deployments to release tags matching `v*.*.*`.
-- When using `workflow_dispatch`, run the workflow from the tag ref in GitHub's "Use workflow from" selector.
+- Restrict deployments to the protected `main` branch.
+- Use `workflow_dispatch` with a commit SHA on `main` only to repair or retry a release.
 
 Store these as environment variables on the `release` environment:
 
@@ -90,13 +90,16 @@ The non-sensitive values are referenced with GitHub Actions `vars`. `AZURE_CLIEN
 
 ## Release Flow
 
-1. Update `package.json` to the version you want to publish.
-2. Create and push a release tag such as `v0.1.1`.
-3. GitHub Actions runs `npm run verify`, builds a Windows x64 NSIS installer, signs it with Azure Artifact Signing, verifies Authenticode signatures, verifies updater metadata, and publishes the installer, blockmap, `latest.yml`, and `SHA256SUMS.txt` to the GitHub Release.
+1. Open a pull request and optionally apply one of `release:patch`, `release:minor`, or `release:major`. An unlabeled pull request defaults to patch.
+2. Merge the pull request with squash merge after `CI / Gate` passes.
+3. The release workflow calculates the next version from Git tags and first-parent pull request history. The checked-in `package.json` remains `0.0.0-development`.
+4. GitHub Actions injects the calculated version, builds a Windows x64 NSIS installer, signs it with Azure Artifact Signing, verifies Authenticode signatures and updater metadata, generates checksums, and publishes the release.
+
+The tag points to the exact squash-merge commit. Re-running the workflow for the same SHA is idempotent and repairs missing release assets instead of allocating another version.
 
 ## Local Checks
 
-Run the unsigned local checks before tagging:
+Run the unsigned local checks before merging:
 
 ```bash
 npm run verify

@@ -23,14 +23,18 @@ export class AgentService {
   ) {}
 
   async handleChat(request: ChatRequest): Promise<ChatResponse> {
-    const project = request.projectId ? this.db.getProject(request.projectId) ?? this.createProjectFromPrompt(request.content) : this.createProjectFromPrompt(request.content);
+    const project = request.projectId
+      ? (this.db.getProject(request.projectId) ?? this.createProjectFromPrompt(request.content))
+      : this.createProjectFromPrompt(request.content);
     this.db.appendMessage({ projectId: project.id, role: "user", content: request.content, metadata: {} });
 
     const intent = classifyIntent(request.content);
     if (intent === "crawl") {
       const config = buildCrawlConfig(project, request);
       const result = await this.crawl.runCrawl(project.id, config, { approved: false });
-      const warningText = result.warnings.length ? `\n\nWarnings:\n${result.warnings.map((warning) => `- ${warning}`).join("\n")}` : "";
+      const warningText = result.warnings.length
+        ? `\n\nWarnings:\n${result.warnings.map((warning) => `- ${warning}`).join("\n")}`
+        : "";
       const crawlJob = this.jobs.get(result.jobId);
       this.db.appendMessage({
         projectId: project.id,
@@ -39,8 +43,8 @@ export class AgentService {
           crawlJob?.status === "waiting-approval"
             ? `I prepared a crawl for "${config.topic}" and it is waiting for your approval in the job panel.${warningText}`
             : result.papers.length > 0
-            ? `I crawled ${result.papers.length} open-access papers for "${config.topic}" and added ${result.artifacts.length} artifacts to the project.${warningText}`
-            : `I started the crawl workflow for "${config.topic}", but no papers were retained yet.${warningText}`,
+              ? `I crawled ${result.papers.length} open-access papers for "${config.topic}" and added ${result.artifacts.length} artifacts to the project.${warningText}`
+              : `I started the crawl workflow for "${config.topic}", but no papers were retained yet.${warningText}`,
         metadata: { tool: "crawl", jobId: result.jobId, artifactIds: result.artifacts.map((artifact) => artifact.id) }
       });
     } else if (intent === "project-search") {
@@ -118,7 +122,9 @@ export class AgentService {
 
 function classifyIntent(content: string): "crawl" | "brief" | "state" | "project-search" | "chat" {
   const text = content.toLowerCase();
-  const asksForNewSourceWork = /\b(crawl|collect|gather)\b/.test(text) || /\b(search|find)\b[\s\S]*\b(papers?|literature|sources?|studies|articles)\b/.test(text);
+  const asksForNewSourceWork =
+    /\b(crawl|collect|gather)\b/.test(text) ||
+    /\b(search|find)\b[\s\S]*\b(papers?|literature|sources?|studies|articles)\b/.test(text);
   const asksAboutSavedState =
     /\b(what|which|show|list|display|do i have|already)\b[\s\S]*\b(papers?|artifacts?|files?|jobs?|project|corpus|database|db)\b/.test(
       text
@@ -127,10 +133,18 @@ function classifyIntent(content: string): "crawl" | "brief" | "state" | "project
       text
     );
   if (asksAboutSavedState) return "state";
-  if (/\b(search|find|look up|lookup)\b[\s\S]*\b(this|the|my)\b[\s\S]*\b(project|corpus|database|db|saved|stored|existing)\b/.test(text)) {
+  if (
+    /\b(search|find|look up|lookup)\b[\s\S]*\b(this|the|my)\b[\s\S]*\b(project|corpus|database|db|saved|stored|existing)\b/.test(
+      text
+    )
+  ) {
     return "project-search";
   }
-  if (!asksForNewSourceWork && /\b(brief|insight|summarize|synthesis|compare|gap|controvers|timeline|report)\b/.test(text)) return "brief";
+  if (
+    !asksForNewSourceWork &&
+    /\b(brief|insight|summarize|synthesis|compare|gap|controvers|timeline|report)\b/.test(text)
+  )
+    return "brief";
   if (/\b(search|find)\b[\s\S]*\b(papers?|literature|sources?|studies|articles)\b/.test(text)) return "crawl";
   if (/\b(crawl|collect|gather)\b/.test(text)) return "crawl";
   if (/\b(papers?|literature|studies|articles)\b\s+(?:about|on|for)\b/.test(text)) return "crawl";
@@ -195,7 +209,13 @@ function renderProjectSearch(db: PaperPilotDb, projectId: string, prompt: string
   const chunks = db.hybridSearchChunks(projectId, query, 6);
   const papers = db
     .listPapers(projectId)
-    .filter((paper) => [paper.title, paper.abstract, paper.venue, paper.doi].filter(Boolean).join(" ").toLowerCase().includes(query.toLowerCase()))
+    .filter((paper) =>
+      [paper.title, paper.abstract, paper.venue, paper.doi]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(query.toLowerCase())
+    )
     .slice(0, 6);
 
   if (!chunks.length && !papers.length) {
@@ -228,7 +248,10 @@ function inferProjectSearchQuery(prompt: string): string {
   if (quoted) return quoted.trim();
   return (
     prompt
-      .replace(/\b(search|find|look up|lookup|this|the|my|project|corpus|database|db|saved|stored|existing|for|about|in)\b/gi, " ")
+      .replace(
+        /\b(search|find|look up|lookup|this|the|my|project|corpus|database|db|saved|stored|existing|for|about|in)\b/gi,
+        " "
+      )
       .replace(/\s+/g, " ")
       .trim()
       .replace(/[.?!]$/, "") || prompt.trim()
@@ -237,11 +260,13 @@ function inferProjectSearchQuery(prompt: string): string {
 
 function inferProjectTitle(prompt: string): string {
   const topic = inferTopic(prompt) ?? prompt;
-  return topic
-    .replace(/\b(crawl|search|find|collect|gather|papers?|literature|about|on|for)\b/gi, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 80) || "Untitled research project";
+  return (
+    topic
+      .replace(/\b(crawl|search|find|collect|gather|papers?|literature|about|on|for)\b/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 80) || "Untitled research project"
+  );
 }
 
 function inferTopic(prompt: string): string | undefined {

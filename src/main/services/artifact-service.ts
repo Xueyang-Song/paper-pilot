@@ -116,21 +116,33 @@ export class ArtifactService {
     return artifact;
   }
 
-  async exportArtifacts(input: { projectId: string; artifactIds: string[]; targetDir: string }): Promise<{ exported: number; paths: string[] }> {
+  async exportArtifacts(input: {
+    projectId: string;
+    artifactIds: string[];
+    targetDir: string;
+  }): Promise<{ exported: number; paths: string[] }> {
     const artifacts = input.artifactIds
       .map((artifactId) => this.db.getArtifact(input.projectId, artifactId))
       .filter((artifact): artifact is Artifact => Boolean(artifact));
     const paths: string[] = [];
     await ensureDir(input.targetDir);
     for (const artifact of artifacts) {
-      const targetPath = join(input.targetDir, `${safeFilename(artifact.title)}-${artifact.id}${extname(artifact.path) || defaultExtension(artifact.type)}`);
+      const targetPath = join(
+        input.targetDir,
+        `${safeFilename(artifact.title)}-${artifact.id}${extname(artifact.path) || defaultExtension(artifact.type)}`
+      );
       await copyFile(artifact.path, targetPath);
       paths.push(targetPath);
     }
     return { exported: paths.length, paths };
   }
 
-  async importUnknownFile(input: { projectId: string; sourcePath: string; title?: string; source?: string }): Promise<Artifact> {
+  async importUnknownFile(input: {
+    projectId: string;
+    sourcePath: string;
+    title?: string;
+    source?: string;
+  }): Promise<Artifact> {
     const type = artifactTypeFromPath(input.sourcePath);
     return this.importFile({
       projectId: input.projectId,
@@ -142,7 +154,10 @@ export class ArtifactService {
     });
   }
 
-  async indexArtifact(artifact: Artifact, options: { replace?: boolean } = {}): Promise<{ chunkCount: number; warning?: string }> {
+  async indexArtifact(
+    artifact: Artifact,
+    options: { replace?: boolean } = {}
+  ): Promise<{ chunkCount: number; warning?: string }> {
     const content = await readFile(artifact.path);
     return this.indexArtifactContent(artifact, content, options);
   }
@@ -235,7 +250,11 @@ function mimeFromExtension(path: string): string {
 async function buildIndexChunks(artifact: Artifact, content: Buffer | string): Promise<IndexChunk[]> {
   if (typeof content === "string") return chunksForText(content);
   if (isTextArtifact(artifact)) return chunksForText(content.toString("utf8"));
-  if (artifact.mime === "application/pdf" || artifact.type === "paper-pdf" || extname(artifact.path).toLowerCase() === ".pdf") {
+  if (
+    artifact.mime === "application/pdf" ||
+    artifact.type === "paper-pdf" ||
+    extname(artifact.path).toLowerCase() === ".pdf"
+  ) {
     const parser = new PDFParse({ data: content });
     try {
       const result = await parser.getText();
