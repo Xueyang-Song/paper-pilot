@@ -37,7 +37,7 @@ Use this checklist for fundamentals/stabilization passes before adding another m
 - [ ] Confirm PDF search terms are highlighted on the page.
 - [ ] Use previous/next hit buttons and confirm the active highlight changes.
 - [ ] In Settings, switch between Ollama, Vercel AI Gateway, and OpenAI-compatible providers and run the provider health check.
-- [ ] Confirm hosted providers without a stored key show a warning without making a generation request.
+- [ ] Confirm Vercel without a stored key shows a warning, while a no-auth local OpenAI-compatible endpoint can run.
 - [ ] Create two named chats in one project and confirm their histories and context remain isolated.
 - [ ] Rename, export, and delete a chat; confirm deleting it does not delete its generated answer artifacts.
 - [ ] In Grounded mode, ask a corpus question and confirm every research block has clickable evidence markers.

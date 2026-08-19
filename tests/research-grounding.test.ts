@@ -97,6 +97,9 @@ describe("research grounding", () => {
     expect(
       validateResearchCitations("A claim with the wrong reference marker [[S9]].", evidence, false).invalidIds
     ).toEqual(["S9"]);
+    expect(validateResearchCitations("- Mortality fell by 20%.", evidence, true).uncoveredBlocks).toEqual([
+      "- Mortality fell by 20%."
+    ]);
   });
 
   it("uses a visible recent context window without summaries", () => {
@@ -114,6 +117,53 @@ describe("research grounding", () => {
     expect(result.included).toBeGreaterThan(0);
     expect(result.omitted).toBeGreaterThan(0);
     expect(result.messages.at(-1)?.id).toBe("message_19");
+    expect(result.included % 2).toBe(0);
+    expect(result.messages[0]?.role).toBe("user");
+  });
+
+  it("never splits or overfills an oversized historical turn", () => {
+    const messages = [
+      {
+        id: "user",
+        projectId: "project",
+        conversationId: "conversation",
+        role: "user" as const,
+        content: "oversized ".repeat(4_000),
+        status: "completed" as const,
+        metadata: {},
+        createdAt: "2026-01-01T00:00:00.000Z"
+      },
+      {
+        id: "assistant",
+        projectId: "project",
+        conversationId: "conversation",
+        role: "assistant" as const,
+        content: "answer",
+        status: "completed" as const,
+        metadata: {},
+        createdAt: "2026-01-01T00:00:01.000Z"
+      }
+    ];
+    const result = buildRecentContext(messages, "ollama", "system prompt");
+    expect(result.messages).toEqual([]);
+    expect(result).toMatchObject({ included: 0, omitted: 2 });
+  });
+
+  it("reserves provider context for normalized tool results", () => {
+    const messages = Array.from({ length: 6 }, (_, index) => ({
+      id: `message_${index}`,
+      projectId: "project",
+      conversationId: "conversation",
+      role: index % 2 ? ("assistant" as const) : ("user" as const),
+      content: "context ".repeat(500),
+      status: "completed" as const,
+      metadata: {},
+      createdAt: new Date(index).toISOString()
+    }));
+    const withoutReserve = buildRecentContext(messages, "ollama", "system prompt");
+    const withReserve = buildRecentContext(messages, "ollama", "system prompt", 2_000);
+    expect(withReserve.included).toBeLessThan(withoutReserve.included);
+    expect(withReserve.included % 2).toBe(0);
   });
 
   it("derives bounded deterministic conversation titles", () => {

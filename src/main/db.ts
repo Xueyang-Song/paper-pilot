@@ -75,10 +75,15 @@ export class PaperPilotDb {
   constructor(dbPath: string) {
     mkdirSync(dirname(dbPath), { recursive: true });
     this.db = new DatabaseSync(dbPath, { allowExtension: true });
-    this.db.exec("PRAGMA journal_mode = WAL");
-    this.db.exec("PRAGMA foreign_keys = ON");
-    this.loadVectorExtension();
-    this.migrate();
+    try {
+      this.db.exec("PRAGMA journal_mode = WAL");
+      this.db.exec("PRAGMA foreign_keys = ON");
+      this.loadVectorExtension();
+      this.migrate();
+    } catch (error) {
+      this.db.close();
+      throw error;
+    }
   }
 
   close(): void {
@@ -86,7 +91,15 @@ export class PaperPilotDb {
   }
 
   migrate(): void {
-    this.db.exec(`
+    const currentVersion = Number(
+      (this.db.prepare("PRAGMA user_version").get() as { user_version?: number }).user_version ?? 0
+    );
+    if (currentVersion > 2) {
+      throw new Error(`Database schema version ${currentVersion} is newer than this Paper Pilot build supports.`);
+    }
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      this.db.exec(`
       CREATE TABLE IF NOT EXISTS projects (
         id TEXT PRIMARY KEY,
         title TEXT NOT NULL,
@@ -299,21 +312,21 @@ export class PaperPilotDb {
         created_at TEXT NOT NULL
       );
     `);
-    this.ensureColumn("projects", "description", "TEXT");
-    this.ensureColumn("projects", "archived_at", "TEXT");
-    this.ensureColumn("projects", "pinned_at", "TEXT");
-    this.ensureColumn("papers", "score", "REAL");
-    this.ensureColumn("papers", "score_json", "TEXT");
-    this.ensureColumn("papers", "favorite", "INTEGER NOT NULL DEFAULT 0");
-    this.ensureColumn("papers", "user_status", "TEXT NOT NULL DEFAULT 'unread'");
-    this.ensureColumn("papers", "tags_json", "TEXT NOT NULL DEFAULT '[]'");
-    this.ensureColumn("papers", "notes", "TEXT");
-    this.ensureColumn("messages", "conversation_id", "TEXT");
-    this.ensureColumn("messages", "run_id", "TEXT");
-    this.ensureColumn("messages", "status", "TEXT NOT NULL DEFAULT 'completed'");
-    this.ensureColumn("tool_runs", "run_id", "TEXT");
-    this.backfillConversations();
-    this.db.exec(`
+      this.ensureColumn("projects", "description", "TEXT");
+      this.ensureColumn("projects", "archived_at", "TEXT");
+      this.ensureColumn("projects", "pinned_at", "TEXT");
+      this.ensureColumn("papers", "score", "REAL");
+      this.ensureColumn("papers", "score_json", "TEXT");
+      this.ensureColumn("papers", "favorite", "INTEGER NOT NULL DEFAULT 0");
+      this.ensureColumn("papers", "user_status", "TEXT NOT NULL DEFAULT 'unread'");
+      this.ensureColumn("papers", "tags_json", "TEXT NOT NULL DEFAULT '[]'");
+      this.ensureColumn("papers", "notes", "TEXT");
+      this.ensureColumn("messages", "conversation_id", "TEXT");
+      this.ensureColumn("messages", "run_id", "TEXT");
+      this.ensureColumn("messages", "status", "TEXT NOT NULL DEFAULT 'completed'");
+      this.ensureColumn("tool_runs", "run_id", "TEXT");
+      this.backfillConversations();
+      this.db.exec(`
       CREATE INDEX IF NOT EXISTS idx_conversations_project_updated
         ON conversations(project_id, updated_at DESC);
       CREATE INDEX IF NOT EXISTS idx_messages_conversation_created
@@ -324,13 +337,18 @@ export class PaperPilotDb {
         ON chat_citations(run_id, evidence_id);
       PRAGMA user_version = 2;
     `);
-    if (this.vecAvailable) {
-      this.db.exec(`
+      if (this.vecAvailable) {
+        this.db.exec(`
         CREATE VIRTUAL TABLE IF NOT EXISTS chunk_embeddings_vec USING vec0(
           embedding float[384],
           +chunk_id text
         );
-      `);
+        `);
+      }
+      this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
     }
   }
 

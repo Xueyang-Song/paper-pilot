@@ -405,13 +405,6 @@ export const aiProviderHealthSchema = z.object({
 });
 export type AiProviderHealth = z.infer<typeof aiProviderHealthSchema>;
 
-export const chatRequestSchema = z.object({
-  projectId: z.string().optional(),
-  content: z.string().min(1),
-  crawlConfig: crawlConfigSchema.partial().optional()
-});
-export type ChatRequest = z.infer<typeof chatRequestSchema>;
-
 export const startChatRunRequestSchema = z.object({
   projectId: z.string(),
   conversationId: z.string(),
@@ -429,12 +422,36 @@ export const startChatRunResponseSchema = z.object({
 export type StartChatRunResponse = z.infer<typeof startChatRunResponseSchema>;
 
 export const chatRunEventSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("status"), runId: z.string(), status: chatRunStatusSchema }),
-  z.object({ type: z.literal("delta"), runId: z.string(), text: z.string() }),
-  z.object({ type: z.literal("trace"), runId: z.string(), step: chatTraceStepSchema }),
+  z.object({
+    type: z.literal("status"),
+    runId: z.string(),
+    projectId: z.string(),
+    conversationId: z.string(),
+    assistantMessageId: z.string(),
+    status: chatRunStatusSchema
+  }),
+  z.object({
+    type: z.literal("delta"),
+    runId: z.string(),
+    projectId: z.string(),
+    conversationId: z.string(),
+    assistantMessageId: z.string(),
+    text: z.string()
+  }),
+  z.object({
+    type: z.literal("trace"),
+    runId: z.string(),
+    projectId: z.string(),
+    conversationId: z.string(),
+    assistantMessageId: z.string(),
+    step: chatTraceStepSchema
+  }),
   z.object({
     type: z.literal("complete"),
     runId: z.string(),
+    projectId: z.string(),
+    conversationId: z.string(),
+    assistantMessageId: z.string(),
     run: chatRunSchema,
     message: messageSchema,
     artifact: artifactSchema.optional(),
@@ -443,19 +460,14 @@ export const chatRunEventSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("error"),
     runId: z.string(),
+    projectId: z.string(),
+    conversationId: z.string(),
+    assistantMessageId: z.string(),
     error: z.string(),
     status: z.enum(["stopped", "failed"])
   })
 ]);
 export type ChatRunEvent = z.infer<typeof chatRunEventSchema>;
-
-export const chatResponseSchema = z.object({
-  project: projectSchema,
-  messages: z.array(messageSchema),
-  jobs: z.array(jobSchema).default([]),
-  artifacts: z.array(artifactSchema).default([])
-});
-export type ChatResponse = z.infer<typeof chatResponseSchema>;
 
 export const credentialUpsertSchema = z.object({
   sourceId: sourceIdSchema.or(z.literal("ai-gateway")),

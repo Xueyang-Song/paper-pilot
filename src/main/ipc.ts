@@ -4,28 +4,33 @@ import { readFile, rm, stat, writeFile } from "node:fs/promises";
 import { basename, extname } from "node:path";
 import { z } from "zod";
 import {
+  artifactSchema,
   artifactUpdateSchema,
   appSettingsSchema,
   aiProviderCheckRequestSchema,
   chatModeSchema,
+  chatRunSchema,
   chatRunEventSchema,
+  citationSchema,
+  conversationSchema,
   credentialUpsertSchema,
   crawlConfigSchema,
+  messageSchema,
   paperSchema,
   paperUpdateSchema,
+  projectSchema,
   projectUpdateSchema,
   reindexRequestSchema,
   searchRequestSchema,
   startChatRunRequestSchema,
   type Artifact,
-  type ChatRun,
   type Citation,
-  type Conversation,
   type Paper,
-  type ProjectPolicy
+  type ProjectPolicy,
+  type SourceRef
 } from "../shared/schemas.js";
 import type { PaperPilotDb } from "./db.js";
-import { id, projectDataPath, safeFilename } from "./utils.js";
+import { id, projectDataPath, safeFilename, sha256 } from "./utils.js";
 import type { SourceRegistry } from "./sources/registry.js";
 import type { AiService } from "./services/ai-service.js";
 import type { ArtifactService } from "./services/artifact-service.js";
@@ -174,7 +179,7 @@ export function registerIpc(services: IpcServices): void {
     });
     const filePath = result.filePaths[0];
     if (result.canceled || !filePath) return undefined;
-    const raw = JSON.parse(await readFile(filePath, "utf8")) as ProjectExportBundle;
+    const raw = projectExportBundleSchema.parse(JSON.parse(await readFile(filePath, "utf8")));
     return importProjectBundle(services, raw);
   });
 
@@ -609,19 +614,25 @@ function titleBarOverlayOptions(theme: "light" | "dark") {
   };
 }
 
-interface ProjectExportBundle {
-  version: 1 | 2;
-  exportedAt: string;
-  project: ReturnType<PaperPilotDb["getProject"]>;
-  conversations?: Conversation[];
-  messages: ReturnType<PaperPilotDb["listMessages"]>;
-  runs?: ChatRun[];
-  citations?: Citation[];
-  papers: Paper[];
-  artifacts: Array<Artifact & { filename: string; contentBase64: string }>;
-}
+const projectExportBundleSchema = z.object({
+  version: z.union([z.literal(1), z.literal(2)]),
+  exportedAt: z.string(),
+  project: projectSchema,
+  conversations: z.array(conversationSchema).optional(),
+  messages: z.array(messageSchema),
+  runs: z.array(chatRunSchema).optional(),
+  citations: z.array(citationSchema).optional(),
+  papers: z.array(paperSchema),
+  artifacts: z.array(
+    artifactSchema.extend({
+      filename: z.string(),
+      contentBase64: z.string()
+    })
+  )
+});
+type ProjectExportBundle = z.infer<typeof projectExportBundleSchema>;
 
-async function buildProjectExportBundle(services: IpcServices, projectId: string): Promise<ProjectExportBundle> {
+export async function buildProjectExportBundle(services: IpcServices, projectId: string): Promise<ProjectExportBundle> {
   const project = services.db.getProject(projectId);
   if (!project) throw new Error(`Project not found: ${projectId}`);
   const artifacts = await Promise.all(
@@ -654,8 +665,12 @@ async function copyProject(services: IpcServices, projectId: string, title: stri
   return importProjectBundle(services, { ...bundle, project: { ...project, title } });
 }
 
-async function importProjectBundle(services: IpcServices, bundle: ProjectExportBundle) {
-  if (!bundle.project) throw new Error("Project bundle is missing project metadata.");
+export async function importProjectBundle(services: IpcServices, bundleInput: unknown) {
+  const bundle = projectExportBundleSchema.parse(bundleInput);
+  for (const artifact of bundle.artifacts) {
+    const content = Buffer.from(artifact.contentBase64, "base64");
+    if (sha256(content) !== artifact.hash) throw new Error(`Artifact checksum mismatch: ${artifact.title}`);
+  }
   const project = services.db.createProject(
     bundle.project.title,
     bundle.project.topic,
@@ -703,8 +718,10 @@ async function importProjectBundle(services: IpcServices, bundle: ProjectExportB
     conversationIdMap.set(conversationInput.id, conversation.id);
   }
   const runIdMap = new Map((bundle.runs ?? []).map((run) => [run.id, id("run")]));
+  const citationIdMap = new Map((bundle.citations ?? []).map((citation) => [citation.id, id("cite")]));
   const messageIdMap = new Map<string, string>();
   for (const message of bundle.messages ?? []) {
+    const metadata = remapResearchMetadata(message.metadata, paperIdMap, artifactIdMap, citationIdMap);
     const saved = services.db.appendMessage({
       projectId: project.id,
       conversationId: message.conversationId
@@ -714,7 +731,8 @@ async function importProjectBundle(services: IpcServices, bundle: ProjectExportB
       role: message.role,
       content: message.content,
       status: message.status,
-      metadata: message.metadata
+      metadata,
+      createdAt: message.createdAt
     });
     messageIdMap.set(message.id, saved.id);
   }
@@ -724,7 +742,7 @@ async function importProjectBundle(services: IpcServices, bundle: ProjectExportB
     if (!mappedArtifactId) continue;
     const imported = services.db.getArtifact(project.id, mappedArtifactId);
     if (!imported) continue;
-    const metadata = { ...imported.metadata };
+    const metadata = remapResearchMetadata(imported.metadata, paperIdMap, artifactIdMap, citationIdMap);
     if (typeof metadata.conversationId === "string") {
       metadata.conversationId = conversationIdMap.get(metadata.conversationId) ?? metadata.conversationId;
     }
@@ -743,6 +761,7 @@ async function importProjectBundle(services: IpcServices, bundle: ProjectExportB
       userMessageId: messageIdMap.get(run.userMessageId) ?? run.userMessageId,
       assistantMessageId: run.assistantMessageId ? messageIdMap.get(run.assistantMessageId) : undefined,
       outputArtifactId: run.outputArtifactId ? artifactIdMap.get(run.outputArtifactId) : undefined,
+      sourceRefs: remapSourceRefs(run.sourceRefs, paperIdMap, artifactIdMap),
       status: run.status === "running" || run.status === "queued" ? "failed" : run.status,
       error:
         run.status === "running" || run.status === "queued"
@@ -756,13 +775,15 @@ async function importProjectBundle(services: IpcServices, bundle: ProjectExportB
   for (const citation of bundle.citations ?? []) {
     const mappedRunId = runIdMap.get(citation.runId);
     if (!mappedRunId) continue;
+    const artifactId = citation.artifactId ? artifactIdMap.get(citation.artifactId) : undefined;
     const mapped: Citation = {
       ...citation,
-      id: id("cite"),
+      id: citationIdMap.get(citation.id)!,
       runId: mappedRunId,
       messageId: citation.messageId ? messageIdMap.get(citation.messageId) : undefined,
       paperId: citation.paperId ? paperIdMap.get(citation.paperId) : undefined,
-      artifactId: citation.artifactId ? artifactIdMap.get(citation.artifactId) : undefined
+      artifactId,
+      chunkId: artifactId ? findImportedChunkId(services.db, project.id, artifactId, citation) : undefined
     };
     citationsByRun.set(mappedRunId, [...(citationsByRun.get(mappedRunId) ?? []), mapped]);
   }
@@ -770,6 +791,75 @@ async function importProjectBundle(services: IpcServices, bundle: ProjectExportB
     services.db.replaceCitations(runId, citations);
   }
   return services.db.getProject(project.id) ?? project;
+}
+
+function remapResearchMetadata(
+  input: Record<string, unknown>,
+  paperIdMap: Map<string, string>,
+  artifactIdMap: Map<string, string>,
+  citationIdMap: Map<string, string>
+): Record<string, unknown> {
+  const metadata = { ...input };
+  if (Array.isArray(metadata.sourceRefs)) {
+    metadata.sourceRefs = remapSourceRefs(metadata.sourceRefs, paperIdMap, artifactIdMap);
+  }
+  if (Array.isArray(metadata.citations)) {
+    metadata.citations = metadata.citations.map((value) => {
+      if (!value || typeof value !== "object") return value;
+      const citation = { ...(value as Record<string, unknown>) };
+      if (typeof citation.id === "string") citation.id = citationIdMap.get(citation.id) ?? citation.id;
+      if (typeof citation.paperId === "string") citation.paperId = paperIdMap.get(citation.paperId);
+      if (typeof citation.artifactId === "string") citation.artifactId = artifactIdMap.get(citation.artifactId);
+      delete citation.chunkId;
+      return citation;
+    });
+  }
+  if (Array.isArray(metadata.citationIds)) {
+    metadata.citationIds = metadata.citationIds.flatMap((value) =>
+      typeof value === "string" && citationIdMap.has(value) ? [citationIdMap.get(value)!] : []
+    );
+  }
+  return metadata;
+}
+
+function remapSourceRefs(
+  values: unknown[],
+  paperIdMap: Map<string, string>,
+  artifactIdMap: Map<string, string>
+): SourceRef[] {
+  return values.flatMap<SourceRef>((value) => {
+    if (!value || typeof value !== "object") return [];
+    const candidate = value as { type?: unknown; id?: unknown };
+    if (candidate.type === "paper" && typeof candidate.id === "string") {
+      const mapped = paperIdMap.get(candidate.id);
+      return mapped ? [{ type: "paper" as const, id: mapped }] : [];
+    }
+    if (candidate.type === "artifact" && typeof candidate.id === "string") {
+      const mapped = artifactIdMap.get(candidate.id);
+      return mapped ? [{ type: "artifact" as const, id: mapped }] : [];
+    }
+    return [];
+  });
+}
+
+function findImportedChunkId(
+  db: PaperPilotDb,
+  projectId: string,
+  artifactId: string,
+  citation: Citation
+): string | undefined {
+  const excerpt = citation.excerpt.replace(/\s+/g, " ").trim().slice(0, 160);
+  const chunks = db.listArtifactChunks(projectId, artifactId, 10_000);
+  const exact = chunks.find((chunk) => chunk.text.replace(/\s+/g, " ").includes(excerpt));
+  if (exact) return exact.chunkId;
+  if (!citation.page) return undefined;
+  return chunks.find((chunk) => {
+    try {
+      return Number((JSON.parse(chunk.metadataJson) as { page?: unknown }).page) === citation.page;
+    } catch {
+      return false;
+    }
+  })?.chunkId;
 }
 
 function renderCitationExport(papers: Paper[], format: "bibtex" | "ris" | "csv"): string {

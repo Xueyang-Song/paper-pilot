@@ -83,10 +83,101 @@ describe("ResearchProvider", () => {
     controller.abort();
     await expect(result).rejects.toMatchObject({ name: "AbortError" });
   });
+
+  it("allows OpenAI-compatible endpoints without an API key", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(`data: ${JSON.stringify({ choices: [{ delta: { content: "Local answer." } }] })}\n\n`, {
+        status: 200,
+        headers: { "content-type": "text/event-stream" }
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    await provider().stream({
+      settings: settings("openai-compatible", "http://models.test/v1"),
+      system: "system",
+      messages: [{ role: "user", content: "hello" }],
+      signal: new AbortController().signal,
+      onDelta: () => undefined
+    });
+    expect((fetchMock.mock.calls[0][1] as RequestInit).headers).not.toHaveProperty("Authorization");
+  });
+
+  it("times out stalled provider requests", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        (_url: string, init?: RequestInit) =>
+          new Promise((_resolve, reject) => {
+            init?.signal?.addEventListener("abort", () => reject(init.signal?.reason));
+          })
+      )
+    );
+    await expect(
+      provider(undefined, 5).stream({
+        settings: settings("ollama", "http://ollama.test"),
+        system: "system",
+        messages: [{ role: "user", content: "hello" }],
+        signal: new AbortController().signal,
+        onDelta: () => undefined
+      })
+    ).rejects.toMatchObject({ name: "TimeoutError" });
+  });
+
+  it("normalizes streamed OpenAI-compatible tool calls", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(
+          new Response(
+            [
+              `data: ${JSON.stringify({ choices: [{ delta: { tool_calls: [{ index: 0, id: "call_1", function: { name: "search_corpus", arguments: '{"query":"con' } }] } }] })}`,
+              `data: ${JSON.stringify({ choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: 'trolled"}' } }] } }] })}`,
+              "data: [DONE]",
+              ""
+            ].join("\n"),
+            { status: 200, headers: { "content-type": "text/event-stream" } }
+          )
+        )
+    );
+    const result = await provider("key").chat({
+      settings: settings("openai-compatible", "https://models.test/v1"),
+      system: "system",
+      messages: [{ role: "user", content: "search" }],
+      tools: [
+        {
+          type: "function",
+          function: { name: "search_corpus", description: "Search", parameters: { type: "object" } }
+        }
+      ],
+      signal: new AbortController().signal,
+      onDelta: () => undefined
+    });
+    expect(result).toEqual({
+      content: "",
+      toolCalls: [{ id: "call_1", name: "search_corpus", arguments: { query: "controlled" } }]
+    });
+  });
+
+  it("does not expose raw provider error payloads", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response("secret upstream payload", { status: 500, statusText: "Failure" }))
+    );
+    await expect(
+      provider().stream({
+        settings: settings("ollama", "http://ollama.test"),
+        system: "system",
+        messages: [{ role: "user", content: "hello" }],
+        signal: new AbortController().signal,
+        onDelta: () => undefined
+      })
+    ).rejects.toThrow("Ollama request failed with HTTP 500 Failure.");
+  });
 });
 
-function provider(apiKey?: string): ResearchProvider {
-  return new ResearchProvider({ get: () => apiKey } as unknown as CredentialService);
+function provider(apiKey?: string, timeoutMs?: number): ResearchProvider {
+  return new ResearchProvider({ get: () => apiKey } as unknown as CredentialService, timeoutMs);
 }
 
 function settings(providerName: AppSettings["ai"]["provider"], baseUrl: string): AppSettings {

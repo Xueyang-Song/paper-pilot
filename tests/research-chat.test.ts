@@ -7,6 +7,7 @@ import { ArtifactService } from "../src/main/services/artifact-service";
 import type { CredentialService } from "../src/main/services/credential-service";
 import { ResearchChatService } from "../src/main/services/research-chat-service";
 import type { SettingsService } from "../src/main/services/settings-service";
+import { SourceRegistry } from "../src/main/sources/registry";
 import type { AppSettings, ChatRunEvent } from "../src/shared/schemas";
 
 let dir: string;
@@ -173,6 +174,84 @@ describe("ResearchChatService", () => {
     expect(db.getChatRun(started.runId)?.status).toBe("stopped");
     expect(db.listArtifacts(projectId).filter((artifact) => artifact.type === "chat-answer")).toHaveLength(0);
   });
+
+  it("executes the same trusted corpus tool through the provider loop", async () => {
+    const { projectId, conversationId } = seedProject();
+    db.savePaper(projectId, {
+      id: "paper_beta",
+      title: "Beta response",
+      abstract: "Beta response evidence is distinct from the controlled improvement study.",
+      authors: ["Beta Author"],
+      source: "crossref",
+      isOpenAccess: true,
+      fieldsOfStudy: []
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          `${JSON.stringify({ message: { content: "", tool_calls: [{ id: "call_1", function: { name: "search_corpus", arguments: { query: "controlled improvement" } } }] } })}\n`,
+          { status: 200, headers: { "content-type": "application/x-ndjson" } }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          `${JSON.stringify({ message: { content: "The controlled study reports a measured improvement. [[S2]]" } })}\n`,
+          { status: 200, headers: { "content-type": "application/x-ndjson" } }
+        )
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const service = createService();
+    const events: ChatRunEvent[] = [];
+    const terminalPromise = terminalEvent(events);
+    const started = await service.start(
+      {
+        projectId,
+        conversationId,
+        content: "Explain the beta response after searching",
+        mode: "grounded",
+        sourceRefs: []
+      },
+      (event) => events.push(event)
+    );
+    await terminalPromise;
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const secondRequest = JSON.parse(String((fetchMock.mock.calls[1][1] as RequestInit).body)) as {
+      messages: Array<{ role: string; content: string }>;
+    };
+    expect(secondRequest.messages.find((message) => message.role === "tool")?.content).toContain('"evidenceId":"S2"');
+    expect(db.getChatRun(started.runId)?.trace.some((step) => step.toolName === "search_corpus")).toBe(true);
+    expect(db.listCitations(started.runId)).toMatchObject([{ evidenceId: "S2", paperId: "paper_1" }]);
+  });
+
+  it("uses the shared safe tool executor for explicit source-list requests", async () => {
+    const project = db.createProject("Sources project");
+    const conversation = db.ensureDefaultConversation(project.id);
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const service = createService(new SourceRegistry());
+    const events: ChatRunEvent[] = [];
+    const terminalPromise = terminalEvent(events);
+    const started = await service.start(
+      {
+        projectId: project.id,
+        conversationId: conversation.id,
+        content: "List the available scholarly sources",
+        mode: "grounded",
+        sourceRefs: []
+      },
+      (event) => events.push(event)
+    );
+    await terminalPromise;
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(db.getChatRun(started.runId)?.trace.slice(0, 2)).toMatchObject([
+      { toolName: "list_sources", status: "running" },
+      { toolName: "list_sources", status: "completed" }
+    ]);
+    expect(db.listMessages(project.id, conversation.id).at(-1)?.content).toContain("Scholarly sources");
+  });
 });
 
 function seedProject(): { projectId: string; conversationId: string } {
@@ -189,7 +268,7 @@ function seedProject(): { projectId: string; conversationId: string } {
   return { projectId: project.id, conversationId: db.ensureDefaultConversation(project.id).id };
 }
 
-function createService(): ResearchChatService {
+function createService(registry?: SourceRegistry): ResearchChatService {
   const settings: AppSettings = {
     ui: { theme: "system" },
     ai: {
@@ -206,7 +285,8 @@ function createService(): ResearchChatService {
     db,
     new ArtifactService(db, dir),
     { get: async () => settings } as SettingsService,
-    { get: () => undefined } as unknown as CredentialService
+    { get: () => undefined } as unknown as CredentialService,
+    registry
   );
 }
 

@@ -84,6 +84,17 @@ describe("conversation persistence", () => {
     const [conversation] = db.listConversations("legacy_project");
     expect(conversation.title).toBe("Existing conversation");
     expect(db.listMessages("legacy_project", conversation.id)[0].content).toBe("preserve me");
+    const migrated = new DatabaseSync(path);
+    expect((migrated.prepare("PRAGMA user_version").get() as { user_version: number }).user_version).toBe(2);
+    migrated.close();
     db.close();
+  });
+
+  it("refuses to open a database created by a newer schema", () => {
+    const path = join(dir, "future.db");
+    const future = new DatabaseSync(path);
+    future.exec("PRAGMA user_version = 3");
+    future.close();
+    expect(() => new PaperPilotDb(path)).toThrow(/newer than this Paper Pilot build supports/i);
   });
 });

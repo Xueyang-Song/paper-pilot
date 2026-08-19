@@ -49,7 +49,7 @@ export class AiService {
         });
         content = [aiWarning, "", localBrief(project.title, prompt, papers, chunks)].join("\n");
       }
-    } else if (settings.ai.hasApiKey) {
+    } else if (settings.ai.provider === "openai-compatible" || settings.ai.hasApiKey) {
       this.jobs.update(job.id, {
         progress: 0.35,
         detail: `Calling configured ${providerLabel(settings.ai.provider)} model.`
@@ -98,11 +98,11 @@ export class AiService {
 
   async callGateway(settings: AppSettings, prompt: string): Promise<string> {
     const apiKey = this.credentials.get("ai-gateway");
-    if (!apiKey) throw new Error("AI Gateway API key is not configured.");
+    if (settings.ai.provider === "vercel" && !apiKey) throw new Error("AI Gateway API key is not configured.");
     const response = await fetch(openAiCompatibleUrl(settings.ai.baseUrl, "chat/completions"), {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${apiKey}`,
+        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
@@ -189,7 +189,7 @@ export class AiService {
         });
       }
 
-      if (!hasApiKey) {
+      if (ai.provider === "vercel" && !hasApiKey) {
         return aiProviderHealthSchema.parse({
           provider: ai.provider,
           baseUrl: ai.baseUrl,
@@ -203,7 +203,7 @@ export class AiService {
       }
 
       const response = await fetch(openAiCompatibleUrl(ai.baseUrl, "models"), {
-        headers: { Authorization: `Bearer ${this.credentials.get("ai-gateway")}` },
+        headers: hasApiKey ? { Authorization: `Bearer ${this.credentials.get("ai-gateway")}` } : {},
         signal: AbortSignal.timeout(5000)
       });
       if (!response.ok) {

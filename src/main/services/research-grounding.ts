@@ -158,22 +158,29 @@ export function formatEvidenceBundle(evidence: ResearchEvidence[]): string {
 export function buildRecentContext(
   messages: Message[],
   provider: "ollama" | "vercel" | "openai-compatible",
-  fixedInput: string
+  fixedInput: string,
+  reservedToolTokens = 0
 ): { messages: Message[]; included: number; omitted: number } {
   const contextLimit = provider === "ollama" ? 8_192 : 16_384;
   const inputBudget = Math.floor(contextLimit * 0.75);
-  let remaining = Math.max(0, inputBudget - estimateTokens(fixedInput));
+  let remaining = Math.max(0, inputBudget - estimateTokens(fixedInput) - reservedToolTokens);
   const eligible = messages.filter(
     (message) => message.status === "completed" && (message.role === "user" || message.role === "assistant")
   );
-  const included: Message[] = [];
-  for (let index = eligible.length - 1; index >= 0; index -= 1) {
-    const message = eligible[index];
-    const cost = estimateTokens(message.content) + 8;
-    if (cost > remaining && included.length > 0) break;
-    included.unshift(message);
-    remaining = Math.max(0, remaining - cost);
+  const turns: Message[][] = [];
+  for (const message of eligible) {
+    if (message.role === "user") turns.push([message]);
+    else if (turns.length) turns.at(-1)!.push(message);
   }
+  const includedTurns: Message[][] = [];
+  for (let index = turns.length - 1; index >= 0; index -= 1) {
+    const turn = turns[index];
+    const cost = turn.reduce((sum, message) => sum + estimateTokens(message.content) + 8, 0);
+    if (cost > remaining) break;
+    includedTurns.unshift(turn);
+    remaining -= cost;
+  }
+  const included = includedTurns.flat();
   return { messages: included, included: included.length, omitted: eligible.length - included.length };
 }
 
@@ -280,9 +287,9 @@ function substantiveBlocks(content: string): string[] {
     .split(/\n{2,}|\n(?=- |\* |\d+\. |\|)/)
     .map((block) => block.trim())
     .filter((block) => {
-      if (block.length < 35) return false;
+      if (block.length < 15) return false;
       if (/^(#|>|```)/.test(block)) return false;
-      if (/^\|?\s*:?-+:?/.test(block)) return false;
+      if (/^\|?[\s:|-]+$/.test(block) && /-{3,}/.test(block)) return false;
       if (/^(I (?:could not|couldn't)|No project evidence|Insufficient evidence)/i.test(block)) return false;
       return /[A-Za-z]{4}/.test(block);
     });

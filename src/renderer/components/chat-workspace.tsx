@@ -21,7 +21,15 @@ import {
 } from "lucide-react";
 import type { FormEvent, JSX } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ChatMode, ChatRun, ChatTraceStep, Citation, Message, SourceRef } from "../../shared/schemas";
+import type {
+  ChatMode,
+  ChatRun,
+  ChatRunEvent,
+  ChatTraceStep,
+  Citation,
+  Message,
+  SourceRef
+} from "../../shared/schemas";
 import type { ProjectBundle } from "../types";
 import { MarkdownMessage } from "./ui";
 import { Badge } from "@/components/ui/badge";
@@ -55,7 +63,7 @@ export function ChatWorkspace(props: {
   const [citationsByRun, setCitationsByRun] = useState<Record<string, Citation[]>>({});
   const [selectedCitation, setSelectedCitation] = useState<Citation>();
   const transcriptEndRef = useRef<HTMLDivElement>(null);
-  const runConversationRef = useRef(new Map<string, string>());
+  const terminalRunIdsRef = useRef(new Set<string>());
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -110,42 +118,37 @@ export function ChatWorkspace(props: {
 
   useEffect(() => {
     return window.paperPilot.onChatRunEvent((event) => {
-      const knownConversationId =
-        runConversationRef.current.get(event.runId) ??
-        (event.type === "complete" ? event.run.conversationId : undefined);
-      if (event.type === "delta" && knownConversationId) {
+      const knownConversationId = event.conversationId;
+      if (event.type === "delta") {
         setLiveRuns((current) => {
-          const live = current[knownConversationId];
-          if (!live || live.runId !== event.runId) return current;
+          const live = liveRunForEvent(current[knownConversationId], event);
           return {
             ...current,
             [knownConversationId]: { ...live, content: live.content + event.text, status: "running" }
           };
         });
-      } else if (event.type === "status" && knownConversationId) {
+      } else if (event.type === "status") {
         setLiveRuns((current) => {
-          const live = current[knownConversationId];
-          return live && live.runId === event.runId
-            ? {
-                ...current,
-                [knownConversationId]: { ...live, status: event.status === "completed" ? "running" : event.status }
-              }
-            : current;
+          const live = liveRunForEvent(current[knownConversationId], event);
+          return {
+            ...current,
+            [knownConversationId]: { ...live, status: event.status === "completed" ? "running" : event.status }
+          };
         });
-      } else if (event.type === "trace" && knownConversationId) {
+      } else if (event.type === "trace") {
         setLiveRuns((current) => {
-          const live = current[knownConversationId];
-          return live && live.runId === event.runId
-            ? { ...current, [knownConversationId]: { ...live, trace: [...live.trace, event.step] } }
-            : current;
+          const live = liveRunForEvent(current[knownConversationId], event);
+          return { ...current, [knownConversationId]: { ...live, trace: [...live.trace, event.step] } };
         });
       } else if (event.type === "complete") {
+        terminalRunIdsRef.current.add(event.runId);
         setCitationsByRun((current) => ({ ...current, [event.runId]: event.citations }));
         void refreshConversation(queryClient, event.run.projectId, event.run.conversationId).then(() => {
           setLiveRuns((current) => removeLiveRun(current, event.run.conversationId, event.runId));
         });
-      } else if (event.type === "error" && knownConversationId) {
-        void refreshConversation(queryClient, props.activeProjectId, knownConversationId).then(() => {
+      } else if (event.type === "error") {
+        terminalRunIdsRef.current.add(event.runId);
+        void refreshConversation(queryClient, event.projectId, knownConversationId).then(() => {
           setLiveRuns((current) => removeLiveRun(current, knownConversationId, event.runId));
         });
       }
@@ -165,18 +168,23 @@ export function ChatWorkspace(props: {
     },
     onSuccess: (response) => {
       if (!activeConversationId || !props.activeProjectId) return;
-      runConversationRef.current.set(response.runId, activeConversationId);
-      setLiveRuns((current) => ({
-        ...current,
-        [activeConversationId]: {
-          runId: response.runId,
-          conversationId: activeConversationId,
-          assistantMessageId: response.assistantMessageId,
-          content: "",
-          status: "queued",
-          trace: []
-        }
-      }));
+      const alreadyTerminal = terminalRunIdsRef.current.delete(response.runId);
+      if (!alreadyTerminal) {
+        setLiveRuns((current) => ({
+          ...current,
+          [activeConversationId]:
+            current[activeConversationId]?.runId === response.runId
+              ? current[activeConversationId]
+              : {
+                  runId: response.runId,
+                  conversationId: activeConversationId,
+                  assistantMessageId: response.assistantMessageId,
+                  content: "",
+                  status: "queued",
+                  trace: []
+                }
+        }));
+      }
       setDraft("");
       setSourceRefs([]);
       setSourcePickerOpen(false);
@@ -510,6 +518,7 @@ function MessageBubble(props: {
   const isUser = props.message.role === "user";
   const citations = new Map(props.citations.map((citation) => [citation.evidenceId, citation]));
   const trace = props.trace ?? props.run?.trace ?? [];
+  const contextStep = trace.find((step) => step.kind === "context");
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
       <div
@@ -522,6 +531,17 @@ function MessageBubble(props: {
           <Badge variant="outline" className="mb-2 gap-1 text-[10px] text-amber-600">
             <Sparkles size={11} /> May use model knowledge
           </Badge>
+        ) : null}
+        {!isUser && props.run ? (
+          <p className="mb-2 text-xs text-muted-foreground">
+            Active context: {props.run.includedMessageCount} messages
+            {props.run.omittedMessageCount > 0 ? ` · ${props.run.omittedMessageCount} older messages omitted` : ""}
+          </p>
+        ) : !isUser && contextStep ? (
+          <p className="mb-2 text-xs text-muted-foreground">
+            {contextStep.label}
+            {contextStep.detail ? ` · ${contextStep.detail}` : ""}
+          </p>
         ) : null}
         {props.message.content ? (
           <MarkdownMessage
@@ -539,7 +559,7 @@ function MessageBubble(props: {
         )}
         {!isUser && props.message.status !== "completed" ? (
           <div className="mt-2 flex items-center justify-between gap-3 text-xs capitalize text-muted-foreground">
-            <span>{props.message.status}</span>
+            <span>{props.message.status === "stopped" ? "Partial · stopped" : props.message.status}</span>
             {props.onRetry && (props.message.status === "failed" || props.message.status === "stopped") ? (
               <Button type="button" size="sm" variant="outline" className="h-7" onClick={props.onRetry}>
                 <RotateCcw size={12} /> Retry
@@ -752,6 +772,21 @@ function removeLiveRun(
   const next = { ...current };
   delete next[conversationId];
   return next;
+}
+
+function liveRunForEvent(
+  current: LiveRun | undefined,
+  event: Pick<ChatRunEvent, "runId" | "conversationId" | "assistantMessageId">
+): LiveRun {
+  if (current?.runId === event.runId) return current;
+  return {
+    runId: event.runId,
+    conversationId: event.conversationId,
+    assistantMessageId: event.assistantMessageId,
+    content: "",
+    status: "queued",
+    trace: []
+  };
 }
 
 async function refreshConversation(
