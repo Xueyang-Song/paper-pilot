@@ -25,7 +25,13 @@ describe("FullTextService", () => {
     const project = db.createProject("OA PDF");
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => new Response(Buffer.from("%PDF-1.7\nfixture"), { status: 200, headers: { "content-type": "application/pdf" } }))
+      vi.fn(
+        async () =>
+          new Response(Buffer.from("%PDF-1.7\nfixture"), {
+            status: 200,
+            headers: { "content-type": "application/pdf" }
+          })
+      )
     );
     const service = new FullTextService(new ArtifactService(db, dir));
     const result = await service.fetchOpenAccessPdf(project.id, {

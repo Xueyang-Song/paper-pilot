@@ -107,7 +107,17 @@ app.whenReady().then(() => {
   const fullText = new FullTextService(artifacts);
   const scoring = new PaperScoringService(db);
   const search = new SearchService(db, artifacts);
-  const crawl = new CrawlService(db, registry, credentials, artifacts, jobs, browserCrawler, fullText, scoring, settings);
+  const crawl = new CrawlService(
+    db,
+    registry,
+    credentials,
+    artifacts,
+    jobs,
+    browserCrawler,
+    fullText,
+    scoring,
+    settings
+  );
   const ai = new AiService(db, settings, credentials, artifacts, jobs);
   const localAgent = new LocalAgentService(db, registry, crawl, ai, jobs, { settings });
   const agent = new AgentService(db, crawl, ai, artifacts, jobs, localAgent);
@@ -117,12 +127,30 @@ app.whenReady().then(() => {
     platform: process.platform
   });
 
-  registerIpc({ db, registry, agent, crawl, ai, artifacts, credentials, settings, python, jobs, scoring, search, updates, dataRoot });
+  registerIpc({
+    db,
+    registry,
+    agent,
+    crawl,
+    ai,
+    artifacts,
+    credentials,
+    settings,
+    python,
+    jobs,
+    scoring,
+    search,
+    updates,
+    dataRoot
+  });
   mainWindow = createWindow();
+  mainWindow.on("closed", () => {
+    mainWindow = undefined;
+  });
   updates.start();
 
   app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) mainWindow = createWindow();
+    if (!mainWindow || mainWindow.isDestroyed()) mainWindow = createWindow();
   });
 });
 

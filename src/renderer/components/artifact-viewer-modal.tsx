@@ -1,10 +1,25 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronUp, Download, ExternalLink, FileText, FolderOpen, Loader2, Pencil, RefreshCw, Save, Search, Star, Trash2, X } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronUp,
+  Download,
+  ExternalLink,
+  FileText,
+  FolderOpen,
+  Loader2,
+  Pencil,
+  RefreshCw,
+  Save,
+  Search,
+  Star,
+  Trash2,
+  X
+} from "lucide-react";
 import type { JSX } from "react";
 import { useEffect, useMemo, useState } from "react";
 import type { Artifact, Paper, PaperUpdate } from "../../shared/schemas";
 import { HighlightedText } from "../lib/highlight";
-import { ArtifactIcon, base64ToBlob, buildArtifactRows, formatBytes, formatJson } from "./artifact-helpers";
+import { ArtifactIcon, buildArtifactRows, formatBytes, formatJson } from "./artifact-helpers";
 import { ArtifactScoreControl, ScoreChip } from "./artifact-panel";
 import { PdfArtifactPreview } from "./pdf-artifact-preview";
 import { IconButton, MarkdownMessage } from "./ui";
@@ -44,7 +59,9 @@ export function ArtifactViewerModal({
   const selectedRow = artifactRows.find((row) => row.artifact.id === selectedArtifactId) ?? artifactRows[0];
   const selectedArtifact = selectedRow?.artifact;
   const selectedPaper = selectedRow?.scoreTarget?.paper;
-  const isSelectedPdf = Boolean(selectedArtifact && (selectedArtifact.mime === "application/pdf" || selectedArtifact.type === "paper-pdf"));
+  const isSelectedPdf = Boolean(
+    selectedArtifact && (selectedArtifact.mime === "application/pdf" || selectedArtifact.type === "paper-pdf")
+  );
   const queryClient = useQueryClient();
   const [activeHitIndex, setActiveHitIndex] = useState(0);
   const [textHitCount, setTextHitCount] = useState(0);
@@ -133,7 +150,11 @@ export function ArtifactViewerModal({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [onClose]);
   useEffect(() => {
-    if (selectedArtifactId && artifactRows.length && !artifactRows.some((row) => row.artifact.id === selectedArtifactId)) {
+    if (
+      selectedArtifactId &&
+      artifactRows.length &&
+      !artifactRows.some((row) => row.artifact.id === selectedArtifactId)
+    ) {
       onSelect(artifactRows[0].artifact.id);
     }
   }, [artifactRows, onSelect, selectedArtifactId]);
@@ -189,34 +210,44 @@ export function ArtifactViewerModal({
             </IconButton>
           </div>
           <ScrollArea className="min-h-0 flex-1">
-          <div className="p-3">
-            <div className="space-y-1">
-              {artifactRows.map(({ artifact, scoreTarget, sourceLabel }) => {
-                const selected = artifact.id === selectedArtifact.id;
-                return (
-                  <button
-                    key={artifact.id}
-                    type="button"
-                    onClick={() => onSelect(artifact.id)}
-                    className={cn(
-                      "flex w-full items-start gap-3 rounded-lg px-3 py-2 text-left transition",
-                      selected ? "bg-primary text-primary-foreground" : "text-sidebar-foreground hover:bg-sidebar-accent"
-                    )}
-                  >
-                    <ArtifactIcon artifact={artifact} className={cn("mt-0.5 shrink-0", selected ? "text-primary-foreground" : "text-primary")} />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-medium">{artifact.title}</span>
-                      <span className={cn("mt-0.5 block truncate text-xs", selected ? "text-primary-foreground/70" : "text-muted-foreground")}>
-                        {artifact.type}
-                        {sourceLabel ? ` / From ${sourceLabel}` : ""}
+            <div className="p-3">
+              <div className="space-y-1">
+                {artifactRows.map(({ artifact, scoreTarget, sourceLabel }) => {
+                  const selected = artifact.id === selectedArtifact.id;
+                  return (
+                    <button
+                      key={artifact.id}
+                      type="button"
+                      onClick={() => onSelect(artifact.id)}
+                      className={cn(
+                        "flex w-full items-start gap-3 rounded-lg px-3 py-2 text-left transition",
+                        selected
+                          ? "bg-primary text-primary-foreground"
+                          : "text-sidebar-foreground hover:bg-sidebar-accent"
+                      )}
+                    >
+                      <ArtifactIcon
+                        artifact={artifact}
+                        className={cn("mt-0.5 shrink-0", selected ? "text-primary-foreground" : "text-primary")}
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-medium">{artifact.title}</span>
+                        <span
+                          className={cn(
+                            "mt-0.5 block truncate text-xs",
+                            selected ? "text-primary-foreground/70" : "text-muted-foreground"
+                          )}
+                        >
+                          {artifact.type}
+                          {sourceLabel ? ` / From ${sourceLabel}` : ""}
+                        </span>
                       </span>
-                    </span>
-                    {scoreTarget ? <ScoreChip score={scoreTarget.score} /> : null}
-                  </button>
-                );
-              })}
+                      {scoreTarget ? <ScoreChip score={scoreTarget.score} /> : null}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          </div>
           </ScrollArea>
         </aside>
         <section className="flex min-h-0 min-w-0 flex-col">
@@ -230,7 +261,11 @@ export function ArtifactViewerModal({
                     className="h-8 min-w-0 flex-1 text-sm font-semibold"
                     maxLength={180}
                   />
-                  <HeaderButton label="Save title" onClick={() => renameArtifact.mutate()} disabled={renameArtifact.isPending}>
+                  <HeaderButton
+                    label="Save title"
+                    onClick={() => renameArtifact.mutate()}
+                    disabled={renameArtifact.isPending}
+                  >
                     {renameArtifact.isPending ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
                   </HeaderButton>
                 </div>
@@ -285,13 +320,7 @@ export function ArtifactViewerModal({
                 </div>
               ) : null}
               {highlightQuery.trim() ? (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={onClearHighlight}
-                  className="max-w-56"
-                >
+                <Button type="button" variant="secondary" size="sm" onClick={onClearHighlight} className="max-w-56">
                   <Search size={13} />
                   <span className="truncate">{highlightQuery}</span>
                   <X size={12} />
@@ -306,13 +335,25 @@ export function ArtifactViewerModal({
                 <FolderOpen size={13} />
                 Show in folder
               </Button>
-              <HeaderButton label="Open original source" onClick={() => openSource.mutate()} disabled={openSource.isPending}>
+              <HeaderButton
+                label="Open original source"
+                onClick={() => openSource.mutate()}
+                disabled={openSource.isPending}
+              >
                 <ExternalLink size={13} />
               </HeaderButton>
-              <HeaderButton label="Export file" onClick={() => exportArtifact.mutate()} disabled={exportArtifact.isPending}>
+              <HeaderButton
+                label="Export file"
+                onClick={() => exportArtifact.mutate()}
+                disabled={exportArtifact.isPending}
+              >
                 <Download size={13} />
               </HeaderButton>
-              <HeaderButton label="Reindex file" onClick={() => reindexArtifact.mutate()} disabled={reindexArtifact.isPending}>
+              <HeaderButton
+                label="Reindex file"
+                onClick={() => reindexArtifact.mutate()}
+                disabled={reindexArtifact.isPending}
+              >
                 {reindexArtifact.isPending ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
               </HeaderButton>
               <HeaderButton
@@ -367,14 +408,19 @@ export function ArtifactViewerModal({
                   placeholder="Notes"
                   className="h-8 min-w-0 flex-1 text-xs"
                 />
-                <HeaderButton label="Export citation" onClick={() => exportCitation.mutate()} disabled={exportCitation.isPending}>
+                <HeaderButton
+                  label="Export citation"
+                  onClick={() => exportCitation.mutate()}
+                  disabled={exportCitation.isPending}
+                >
                   <FileText size={13} />
                 </HeaderButton>
                 <HeaderButton
                   label="Remove paper record"
                   danger
                   onClick={() => {
-                    if (window.confirm(`Remove the paper record for "${selectedPaper.title}"? Files will remain.`)) deletePaper.mutate();
+                    if (window.confirm(`Remove the paper record for "${selectedPaper.title}"? Files will remain.`))
+                      deletePaper.mutate();
                   }}
                   disabled={deletePaper.isPending}
                 >
@@ -407,8 +453,18 @@ export function ArtifactViewerModal({
                     if (Number.isInteger(year)) updatePaper.mutate({ year });
                   }}
                 />
-                <PaperField label="Venue" value={draftVenue} onChange={setDraftVenue} onCommit={() => updatePaper.mutate({ venue: draftVenue.trim() })} />
-                <PaperField label="DOI" value={draftDoi} onChange={setDraftDoi} onCommit={() => updatePaper.mutate({ doi: draftDoi.trim() })} />
+                <PaperField
+                  label="Venue"
+                  value={draftVenue}
+                  onChange={setDraftVenue}
+                  onCommit={() => updatePaper.mutate({ venue: draftVenue.trim() })}
+                />
+                <PaperField
+                  label="DOI"
+                  value={draftDoi}
+                  onChange={setDraftDoi}
+                  onCommit={() => updatePaper.mutate({ doi: draftDoi.trim() })}
+                />
               </div>
             </div>
           ) : null}
@@ -451,16 +507,6 @@ function ArtifactPreview({
   onActiveHitIndexChange(hitIndex: number): void;
   pdfSearchPage?: number;
 }): JSX.Element {
-  const [objectUrl, setObjectUrl] = useState<string | undefined>(undefined);
-  useEffect(() => {
-    if (!data || data.encoding !== "base64" || artifact.mime === "application/pdf" || artifact.type === "paper-pdf") {
-      setObjectUrl(undefined);
-      return undefined;
-    }
-    const url = URL.createObjectURL(base64ToBlob(data.content, artifact.mime));
-    setObjectUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [artifact.mime, data]);
   useEffect(() => {
     if (!highlightQuery.trim()) onHitCountChange(0);
   }, [artifact.id, highlightQuery, onHitCountChange]);
@@ -611,7 +657,9 @@ function CodeViewer({
 }
 function readArtifactContent(projectId: string, artifactId: string): ReturnType<Window["paperPilot"]["readArtifact"]> {
   if (typeof window.paperPilot.readArtifact !== "function") {
-    throw new Error("Artifact viewer bridge is unavailable. Restart Paper Pilot so the updated preload script is loaded.");
+    throw new Error(
+      "Artifact viewer bridge is unavailable. Restart Paper Pilot so the updated preload script is loaded."
+    );
   }
   return window.paperPilot.readArtifact({ projectId, artifactId });
 }
@@ -664,7 +712,9 @@ function PaperField({
 }): JSX.Element {
   return (
     <label className="min-w-0">
-      <span className="mb-1 block text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">{label}</span>
+      <span className="mb-1 block text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+        {label}
+      </span>
       <Input
         value={value}
         onChange={(event) => onChange(event.target.value)}

@@ -5,7 +5,10 @@ export class FullTextService {
   constructor(private readonly artifacts: ArtifactService) {}
 
   async fetchOpenAccessPdf(projectId: string, paper: Paper): Promise<{ artifact?: Artifact; warning?: string }> {
-    if (!paper.pdfUrl || (!paper.isOpenAccess && !paper.pdfUrl.includes("arxiv.org") && !paper.pdfUrl.includes("pmc.ncbi.nlm.nih.gov"))) {
+    if (
+      !paper.pdfUrl ||
+      (!paper.isOpenAccess && !paper.pdfUrl.includes("arxiv.org") && !paper.pdfUrl.includes("pmc.ncbi.nlm.nih.gov"))
+    ) {
       return {};
     }
     try {

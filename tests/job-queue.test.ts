@@ -84,7 +84,13 @@ describe("JobQueue persistence", () => {
     const project = db.createProject("Interrupted jobs");
     const jobs = new JobQueue(db);
     const queued = jobs.create({ projectId: project.id, kind: "agent", status: "queued", title: "Queued agent task" });
-    const running = jobs.create({ projectId: project.id, kind: "crawl", status: "running", title: "Running crawl", detail: "Running Crossref" });
+    const running = jobs.create({
+      projectId: project.id,
+      kind: "crawl",
+      status: "running",
+      title: "Running crawl",
+      detail: "Running Crossref"
+    });
     const waiting = jobs.create({
       projectId: project.id,
       kind: "crawl",

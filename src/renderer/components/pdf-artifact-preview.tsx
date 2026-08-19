@@ -18,11 +18,10 @@ interface PdfDocumentLike {
 interface PdfPageLike {
   getViewport(input: { scale: number }): PdfViewportLike;
   getTextContent(): Promise<PdfTextContentLike>;
-  render(input: {
-    canvasContext: CanvasRenderingContext2D;
-    viewport: PdfViewportLike;
-    transform?: number[];
-  }): { promise: Promise<void>; cancel(): void };
+  render(input: { canvasContext: CanvasRenderingContext2D; viewport: PdfViewportLike; transform?: number[] }): {
+    promise: Promise<void>;
+    cancel(): void;
+  };
 }
 interface PdfViewportLike {
   width: number;
@@ -74,7 +73,10 @@ export function PdfArtifactPreview({
   const [error, setError] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
-  const totalHitCount = useMemo(() => Object.values(pageHitCounts).reduce((total, count) => total + count, 0), [pageHitCounts]);
+  const totalHitCount = useMemo(
+    () => Object.values(pageHitCounts).reduce((total, count) => total + count, 0),
+    [pageHitCounts]
+  );
   useEffect(() => {
     let disposed = false;
     let loadedPdf: PdfDocumentLike | undefined;
@@ -143,7 +145,10 @@ export function PdfArtifactPreview({
           if (cancelled) return;
           const page = await currentPdf.getPage(pageNumber);
           const textContent = await page.getTextContent();
-          const text = textContent.items.map((item) => item.str ?? "").join(" ").toLowerCase();
+          const text = textContent.items
+            .map((item) => item.str ?? "")
+            .join(" ")
+            .toLowerCase();
           const pageHitCount = countPdfTextMatches(textContent.items, tokens);
           if (tokens.every((token) => text.includes(token)) && pageHitCount > 0) {
             matches.push(pageNumber);
@@ -151,19 +156,30 @@ export function PdfArtifactPreview({
           }
         }
         if (cancelled) return;
-        const fallbackPage = searchPage && Number.isInteger(searchPage) && searchPage > 0 ? Math.min(searchPage, currentPdf.numPages) : undefined;
+        const fallbackPage =
+          searchPage && Number.isInteger(searchPage) && searchPage > 0
+            ? Math.min(searchPage, currentPdf.numPages)
+            : undefined;
         const pages = matches.length ? matches : fallbackPage ? [fallbackPage] : [];
         if (!matches.length && fallbackPage) counts[fallbackPage] = 1;
         setHitPages(pages);
         setPageHitCounts(counts);
-        onHitCountChange(Math.max(0, Object.values(counts).reduce((total, count) => total + count, 0)));
+        onHitCountChange(
+          Math.max(
+            0,
+            Object.values(counts).reduce((total, count) => total + count, 0)
+          )
+        );
         if (fallbackPage) {
           const targetIndex = getPdfPageHitOffset(pages, counts, fallbackPage);
           if (targetIndex >= 0) onActiveHitIndexChange(targetIndex);
         }
-      } catch (scanError) {
+      } catch {
         if (!cancelled) {
-          const fallbackPage = searchPage && Number.isInteger(searchPage) && searchPage > 0 ? Math.min(searchPage, currentPdf.numPages) : undefined;
+          const fallbackPage =
+            searchPage && Number.isInteger(searchPage) && searchPage > 0
+              ? Math.min(searchPage, currentPdf.numPages)
+              : undefined;
           const pages = fallbackPage ? [fallbackPage] : [];
           const counts = fallbackPage ? { [fallbackPage]: 1 } : {};
           setHitPages(pages);
@@ -308,7 +324,9 @@ function PdfPageCanvas({
         });
         await renderTask.promise;
         if (cancelled) return;
-        const tokens = shouldHighlightPage ? buildHighlightTokens(highlightQuery).map((token) => token.toLowerCase()) : [];
+        const tokens = shouldHighlightPage
+          ? buildHighlightTokens(highlightQuery).map((token) => token.toLowerCase())
+          : [];
         if (!tokens.length) {
           setHighlightRects([]);
           return;
@@ -384,7 +402,12 @@ function countPdfTextMatches(items: PdfTextItemLike[], tokens: string[]): number
     return total + tokens.reduce((itemTotal, token) => itemTotal + countOccurrences(text, token), 0);
   }, 0);
 }
-function buildPdfHighlightRects(items: PdfTextItemLike[], tokens: string[], viewport: PdfViewportLike, scale: number): PdfHighlightRect[] {
+function buildPdfHighlightRects(
+  items: PdfTextItemLike[],
+  tokens: string[],
+  viewport: PdfViewportLike,
+  scale: number
+): PdfHighlightRect[] {
   if (!tokens.length) return [];
   const rects: PdfHighlightRect[] = [];
   for (const [itemIndex, item] of items.entries()) {
@@ -397,7 +420,10 @@ function buildPdfHighlightRects(items: PdfTextItemLike[], tokens: string[], view
       let start = lowerText.indexOf(token);
       while (start >= 0) {
         const left = itemRect.left + (start / text.length) * itemRect.width;
-        const width = Math.max(6, Math.min(itemRect.width - (left - itemRect.left), (token.length / text.length) * itemRect.width));
+        const width = Math.max(
+          6,
+          Math.min(itemRect.width - (left - itemRect.left), (token.length / text.length) * itemRect.width)
+        );
         if (width > 0) {
           rects.push({
             id: `${itemIndex}-${token}-${start}`,
@@ -413,15 +439,21 @@ function buildPdfHighlightRects(items: PdfTextItemLike[], tokens: string[], view
   }
   return rects;
 }
-function getPdfTextItemRect(item: PdfTextItemLike, viewport: PdfViewportLike, scale: number): PdfHighlightRect | undefined {
-  if (!item.transform || item.transform.length < 6 || !viewport.transform || viewport.transform.length < 6) return undefined;
+function getPdfTextItemRect(
+  item: PdfTextItemLike,
+  viewport: PdfViewportLike,
+  scale: number
+): PdfHighlightRect | undefined {
+  if (!item.transform || item.transform.length < 6 || !viewport.transform || viewport.transform.length < 6)
+    return undefined;
   const transformed = multiplyPdfMatrix(viewport.transform, item.transform);
   const height = Math.max(6, Math.hypot(transformed[2], transformed[3]));
   const estimatedWidth = Math.max(6, (item.str?.length ?? 1) * height * 0.45);
   const width = Math.max(6, (item.width ?? estimatedWidth / scale) * scale);
   const left = transformed[4];
   const top = transformed[5] - height;
-  if (!Number.isFinite(left) || !Number.isFinite(top) || !Number.isFinite(width) || !Number.isFinite(height)) return undefined;
+  if (!Number.isFinite(left) || !Number.isFinite(top) || !Number.isFinite(width) || !Number.isFinite(height))
+    return undefined;
   return {
     id: "",
     left: clamp(left, 0, viewport.width),
@@ -440,7 +472,11 @@ function multiplyPdfMatrix(left: number[], right: number[]): number[] {
     left[1] * right[4] + left[3] * right[5] + left[5]
   ];
 }
-function getPdfPageForHit(hitPages: number[], pageHitCounts: Record<number, number>, hitIndex: number): number | undefined {
+function getPdfPageForHit(
+  hitPages: number[],
+  pageHitCounts: Record<number, number>,
+  hitIndex: number
+): number | undefined {
   let offset = 0;
   for (const pageNumber of hitPages) {
     const count = Math.max(1, pageHitCounts[pageNumber] ?? 0);

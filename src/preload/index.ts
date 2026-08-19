@@ -81,26 +81,51 @@ export interface PaperPilotApi {
   onUpdateStatusChanged(listener: (status: UpdateStatus) => void): () => void;
   saveCredential(input: CredentialUpsert): Promise<Array<{ sourceId: string; label: string; updatedAt: string }>>;
   listCredentialFlags(): Promise<Array<{ sourceId: string; label: string; updatedAt: string }>>;
-  removeCredential(input: { sourceId: string; label?: string }): Promise<Array<{ sourceId: string; label: string; updatedAt: string }>>;
-  testCredential(input: { sourceId: string; label?: string }): Promise<{ sourceId: string; label: string; ok: boolean; detail: string }>;
+  removeCredential(input: {
+    sourceId: string;
+    label?: string;
+  }): Promise<Array<{ sourceId: string; label: string; updatedAt: string }>>;
+  testCredential(input: {
+    sourceId: string;
+    label?: string;
+  }): Promise<{ sourceId: string; label: string; ok: boolean; detail: string }>;
   runCrawl(input: { projectId: string; config: Partial<CrawlConfig>; approved?: boolean }): Promise<unknown>;
-  generateBrief(input: { projectId: string; prompt: string }): Promise<{ content: string; artifactId: string; jobId: string }>;
+  generateBrief(input: {
+    projectId: string;
+    prompt: string;
+  }): Promise<{ content: string; artifactId: string; jobId: string }>;
   checkAiProvider(input?: AiProviderCheckRequest): Promise<AiProviderHealth>;
   scorePapers(input: { projectId: string }): Promise<{ scoredCount: number; papers: Paper[] }>;
   updatePaper(input: PaperUpdate): Promise<Paper>;
   deletePaper(input: { projectId: string; paperId: string }): Promise<{ ok: boolean }>;
-  exportCitations(input: { projectId: string; paperIds?: string[]; format?: "bibtex" | "ris" | "csv" }): Promise<{ ok: boolean; path?: string; count?: number }>;
+  exportCitations(input: {
+    projectId: string;
+    paperIds?: string[];
+    format?: "bibtex" | "ris" | "csv";
+  }): Promise<{ ok: boolean; path?: string; count?: number }>;
   search(input: SearchRequest): Promise<SearchResponse>;
   reindexSearch(input?: ReindexRequest): Promise<ReindexResponse>;
   importArtifacts(input: { projectId: string }): Promise<Artifact[]>;
   readArtifact(input: { projectId: string; artifactId: string }): Promise<ArtifactContent>;
   renameArtifact(input: { projectId: string; artifactId: string; title: string }): Promise<Artifact>;
   deleteArtifacts(input: { projectId: string; artifactIds: string[] }): Promise<{ ok: boolean; deleted: number }>;
-  exportArtifacts(input: { projectId: string; artifactIds: string[] }): Promise<{ ok: boolean; exported?: number; paths?: string[] }>;
-  reindexArtifacts(input: { projectId: string; artifactIds: string[] }): Promise<{ artifactCount: number; chunkCount: number; warnings: string[] }>;
+  exportArtifacts(input: {
+    projectId: string;
+    artifactIds: string[];
+  }): Promise<{ ok: boolean; exported?: number; paths?: string[] }>;
+  reindexArtifacts(input: {
+    projectId: string;
+    artifactIds: string[];
+  }): Promise<{ artifactCount: number; chunkCount: number; warnings: string[] }>;
   revealArtifact(input: { projectId: string; artifactId: string }): Promise<{ ok: boolean }>;
   openArtifactSource(input: { projectId: string; artifactId: string }): Promise<{ ok: boolean }>;
-  runPythonScript(input: { projectId: string; name: string; code: string; args?: string[]; approved?: boolean }): Promise<unknown>;
+  runPythonScript(input: {
+    projectId: string;
+    name: string;
+    code: string;
+    args?: string[];
+    approved?: boolean;
+  }): Promise<unknown>;
   installBrowser(input: { projectId: string; approved?: boolean }): Promise<unknown>;
   convertMarkItDown(input: {
     projectId: string;

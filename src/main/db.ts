@@ -388,7 +388,9 @@ export class PaperPilotDb {
     const policy = { ...defaultPolicy, ...project.policy, ...patch };
     const updatedAt = nowIso();
     const policyJson = JSON.stringify(policy);
-    this.db.prepare("UPDATE projects SET policy_json = ?, updated_at = ? WHERE id = ?").run(policyJson, updatedAt, projectId);
+    this.db
+      .prepare("UPDATE projects SET policy_json = ?, updated_at = ? WHERE id = ?")
+      .run(policyJson, updatedAt, projectId);
     this.db
       .prepare(
         `INSERT INTO project_policies (project_id, policy_json, updated_at)
@@ -514,7 +516,9 @@ export class PaperPilotDb {
 
   listAllPapers(): Paper[] {
     return this.db
-      .prepare("SELECT * FROM papers ORDER BY score DESC NULLS LAST, citation_count DESC NULLS LAST, year DESC NULLS LAST")
+      .prepare(
+        "SELECT * FROM papers ORDER BY score DESC NULLS LAST, citation_count DESC NULLS LAST, year DESC NULLS LAST"
+      )
       .all()
       .map((row) => this.paperFromRow(row as Row));
   }
@@ -526,14 +530,17 @@ export class PaperPilotDb {
       .prepare("UPDATE papers SET score = ?, score_json = ?, updated_at = ? WHERE project_id = ? AND id = ?")
       .run(parsed.overall, JSON.stringify(parsed), updatedAt, projectId, paperId);
     if (result.changes === 0) throw new Error(`Paper not found: ${paperId}`);
-    const row = this.db.prepare("SELECT * FROM papers WHERE project_id = ? AND id = ?").get(projectId, paperId) as Row | undefined;
+    const row = this.db.prepare("SELECT * FROM papers WHERE project_id = ? AND id = ?").get(projectId, paperId) as
+      Row | undefined;
     if (!row) throw new Error(`Paper not found: ${paperId}`);
     this.touchProject(projectId);
     return this.paperFromRow(row);
   }
 
   updatePaper(projectId: string, paperId: string, patch: Partial<Paper>): Paper {
-    const currentRow = this.db.prepare("SELECT * FROM papers WHERE project_id = ? AND id = ?").get(projectId, paperId) as Row | undefined;
+    const currentRow = this.db
+      .prepare("SELECT * FROM papers WHERE project_id = ? AND id = ?")
+      .get(projectId, paperId) as Row | undefined;
     if (!currentRow) throw new Error(`Paper not found: ${paperId}`);
     const current = this.paperFromRow(currentRow);
     const next = paperSchema.parse({ ...current, ...patch, projectId, id: paperId });
@@ -589,7 +596,8 @@ export class PaperPilotDb {
         notes: next.notes ?? null,
         updatedAt
       });
-    const row = this.db.prepare("SELECT * FROM papers WHERE project_id = ? AND id = ?").get(projectId, paperId) as Row | undefined;
+    const row = this.db.prepare("SELECT * FROM papers WHERE project_id = ? AND id = ?").get(projectId, paperId) as
+      Row | undefined;
     if (!row) throw new Error(`Paper not found: ${paperId}`);
     this.indexPaperRow(row);
     this.touchProject(projectId);
@@ -658,7 +666,11 @@ export class PaperPilotDb {
     return row ? this.artifactFromRow(row) : undefined;
   }
 
-  updateArtifact(projectId: string, artifactId: string, patch: Partial<Pick<Artifact, "title" | "metadata">>): Artifact {
+  updateArtifact(
+    projectId: string,
+    artifactId: string,
+    patch: Partial<Pick<Artifact, "title" | "metadata">>
+  ): Artifact {
     const artifact = this.getArtifact(projectId, artifactId);
     if (!artifact) throw new Error(`Artifact not found: ${artifactId}`);
     const title = patch.title === undefined ? artifact.title : patch.title.trim();
@@ -740,7 +752,9 @@ export class PaperPilotDb {
     const statuses = ["completed", "failed", "cancelled"];
     const placeholders = statuses.map(() => "?").join(", ");
     const result = projectId
-      ? this.db.prepare(`DELETE FROM jobs WHERE project_id = ? AND status IN (${placeholders})`).run(projectId, ...statuses)
+      ? this.db
+          .prepare(`DELETE FROM jobs WHERE project_id = ? AND status IN (${placeholders})`)
+          .run(projectId, ...statuses)
       : this.db.prepare(`DELETE FROM jobs WHERE status IN (${placeholders})`).run(...statuses);
     return Number(result.changes);
   }
@@ -787,12 +801,16 @@ export class PaperPilotDb {
 
   listCredentialFlags(): Array<{ sourceId: string; label: string; updatedAt: string }> {
     return this.db
-      .prepare("SELECT source_id as sourceId, label, updated_at as updatedAt FROM source_credentials ORDER BY source_id, label")
+      .prepare(
+        "SELECT source_id as sourceId, label, updated_at as updatedAt FROM source_credentials ORDER BY source_id, label"
+      )
       .all() as Array<{ sourceId: string; label: string; updatedAt: string }>;
   }
 
   deleteCredential(sourceId: string, label = "default"): boolean {
-    const result = this.db.prepare("DELETE FROM source_credentials WHERE source_id = ? AND label = ?").run(sourceId, label);
+    const result = this.db
+      .prepare("DELETE FROM source_credentials WHERE source_id = ? AND label = ?")
+      .run(sourceId, label);
     return result.changes > 0;
   }
 
@@ -837,11 +855,14 @@ export class PaperPilotDb {
   }
 
   clearDocumentChunksForArtifact(artifactId: string): void {
-    const rows = this.db.prepare("SELECT id FROM document_chunks WHERE artifact_id = ?").all(artifactId) as Array<{ id: string }>;
+    const rows = this.db.prepare("SELECT id FROM document_chunks WHERE artifact_id = ?").all(artifactId) as Array<{
+      id: string;
+    }>;
     this.db.exec("BEGIN");
     try {
       for (const row of rows) {
-        const embedding = this.db.prepare("SELECT vec_rowid FROM embeddings WHERE chunk_id = ?").get(row.id) as { vec_rowid?: number } | undefined;
+        const embedding = this.db.prepare("SELECT vec_rowid FROM embeddings WHERE chunk_id = ?").get(row.id) as
+          { vec_rowid?: number } | undefined;
         if (embedding?.vec_rowid && this.vecAvailable) {
           this.db.prepare("DELETE FROM chunk_embeddings_vec WHERE rowid = ?").run(Number(embedding.vec_rowid));
         }
@@ -938,7 +959,12 @@ export class PaperPilotDb {
     }
   }
 
-  searchIndexedChunks(input: { query: string; projectId?: string; artifactId?: string; limit?: number }): ChunkSearchRow[] {
+  searchIndexedChunks(input: {
+    query: string;
+    projectId?: string;
+    artifactId?: string;
+    limit?: number;
+  }): ChunkSearchRow[] {
     const ftsQuery = buildFtsQuery(input.query);
     if (!ftsQuery) return [];
     const clauses = ["document_chunks_fts MATCH @query"];
@@ -979,7 +1005,11 @@ export class PaperPilotDb {
     }
   }
 
-  searchChunks(projectId: string, query: string, limit = 12): Array<{ text: string; artifactId: string; score: number }> {
+  searchChunks(
+    projectId: string,
+    query: string,
+    limit = 12
+  ): Array<{ text: string; artifactId: string; score: number }> {
     const ftsQuery = query
       .split(/\s+/)
       .map((part) => part.replace(/["*]/g, "").trim())
@@ -1003,7 +1033,11 @@ export class PaperPilotDb {
     }
   }
 
-  searchVectorChunks(projectId: string, query: string, limit = 12): Array<{ text: string; artifactId: string; score: number }> {
+  searchVectorChunks(
+    projectId: string,
+    query: string,
+    limit = 12
+  ): Array<{ text: string; artifactId: string; score: number }> {
     if (!this.vecAvailable) return [];
     const vector = textEmbedding384(query);
     try {
@@ -1027,8 +1061,15 @@ export class PaperPilotDb {
     }
   }
 
-  hybridSearchChunks(projectId: string, query: string, limit = 12): Array<{ text: string; artifactId: string; score: number; mode: string }> {
-    const vectorResults = this.searchVectorChunks(projectId, query, limit).map((result) => ({ ...result, mode: "vector" }));
+  hybridSearchChunks(
+    projectId: string,
+    query: string,
+    limit = 12
+  ): Array<{ text: string; artifactId: string; score: number; mode: string }> {
+    const vectorResults = this.searchVectorChunks(projectId, query, limit).map((result) => ({
+      ...result,
+      mode: "vector"
+    }));
     const ftsResults = this.searchChunks(projectId, query, limit).map((result) => ({ ...result, mode: "fts" }));
     const seen = new Set<string>();
     const merged: Array<{ text: string; artifactId: string; score: number; mode: string }> = [];
@@ -1063,9 +1104,9 @@ export class PaperPilotDb {
   private insertLocalEmbedding(chunkId: string, text: string): void {
     if (!this.vecAvailable) return;
     const vector = textEmbedding384(text);
-    const row = this.db.prepare("SELECT vec_rowid FROM embeddings WHERE chunk_id = ? AND model = ?").get(chunkId, "local-hash-384") as
-      | { vec_rowid?: number }
-      | undefined;
+    const row = this.db
+      .prepare("SELECT vec_rowid FROM embeddings WHERE chunk_id = ? AND model = ?")
+      .get(chunkId, "local-hash-384") as { vec_rowid?: number } | undefined;
     if (row?.vec_rowid) {
       this.db.prepare("DELETE FROM chunk_embeddings_vec WHERE rowid = ?").run(Number(row.vec_rowid));
     }
@@ -1205,7 +1246,9 @@ function parseJsonRecord(value: unknown): Record<string, unknown> | undefined {
   if (typeof value !== "string" || !value.trim()) return undefined;
   try {
     const parsed = JSON.parse(value);
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : undefined;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : undefined;
   } catch {
     return undefined;
   }

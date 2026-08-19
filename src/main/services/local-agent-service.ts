@@ -53,7 +53,10 @@ export class LocalAgentService {
     }
   }
 
-  async run(projectId: string, content: string): Promise<{ content: string; response: ChatResponse; provider: "ollama"; model: string }> {
+  async run(
+    projectId: string,
+    content: string
+  ): Promise<{ content: string; response: ChatResponse; provider: "ollama"; model: string }> {
     const config = await this.activeConfig();
     if (!config) throw new Error("Local Ollama agent is disabled because Ollama is not the selected AI provider.");
     const project = this.db.getProject(projectId);
@@ -248,7 +251,10 @@ export class LocalAgentService {
       artifactCount: artifacts.length,
       recentPaperTitles: papers.slice(0, 8).map((paper) => paper.title),
       recentArtifacts: artifacts.slice(0, 8).map((artifact) => ({ title: artifact.title, type: artifact.type })),
-      jobs: this.jobs.list(projectId).slice(0, 8).map((job) => ({ title: job.title, status: job.status, detail: job.detail }))
+      jobs: this.jobs
+        .list(projectId)
+        .slice(0, 8)
+        .map((job) => ({ title: job.title, status: job.status, detail: job.detail }))
     };
   }
 }

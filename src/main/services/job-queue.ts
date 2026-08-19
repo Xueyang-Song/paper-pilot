@@ -74,7 +74,10 @@ export class JobQueue extends EventEmitter {
       status: "cancelled",
       progress: 1,
       detail: current.status === "running" ? "Cancellation requested by user." : "Cancelled by user.",
-      error: current.status === "running" ? "The running operation may finish in the background if the underlying tool cannot be interrupted." : undefined
+      error:
+        current.status === "running"
+          ? "The running operation may finish in the background if the underlying tool cannot be interrupted."
+          : undefined
     });
   }
 

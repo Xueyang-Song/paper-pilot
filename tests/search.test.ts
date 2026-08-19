@@ -74,7 +74,8 @@ describe("SearchService", () => {
     });
 
     expect(
-      search.search({ query: "protein interface", scope: { type: "project", projectId: project.id }, limit: 10 }).results
+      search.search({ query: "protein interface", scope: { type: "project", projectId: project.id }, limit: 10 })
+        .results
     ).toHaveLength(0);
 
     const reindexed = await search.reindex({ projectId: project.id });

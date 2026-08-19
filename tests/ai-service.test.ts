@@ -76,7 +76,10 @@ describe("AiService", () => {
 
   it("falls back to local structured synthesis and records provider metadata on model failure", async () => {
     const project = seedProject();
-    vi.stubGlobal("fetch", vi.fn(async () => new Response("verification required", { status: 403 })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("verification required", { status: 403 }))
+    );
     const service = serviceWithSettings(
       {
         ai: {
@@ -126,7 +129,10 @@ describe("AiService", () => {
   });
 
   it("warns when Ollama is reachable but has no installed models", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ models: [] }), { status: 200 })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify({ models: [] }), { status: 200 }))
+    );
 
     const health = await serviceWithSettings({
       ai: {

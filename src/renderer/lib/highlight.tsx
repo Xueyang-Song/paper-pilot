@@ -122,7 +122,9 @@ export function buildHighlightTokens(query: string): string[] {
     .split(/\s+/)
     .map((token) => token.trim())
     .filter((token) => token.length > 1);
-  return Array.from(new Set(normalized)).slice(0, 8).sort((left, right) => right.length - left.length);
+  return Array.from(new Set(normalized))
+    .slice(0, 8)
+    .sort((left, right) => right.length - left.length);
 }
 export function countOccurrences(value: string, token: string): number {
   let count = 0;

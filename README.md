@@ -7,6 +7,8 @@
 [![Electron](https://img.shields.io/badge/Electron-47848F?style=for-the-badge&logo=electron&logoColor=white)](https://electronjs.org/)
 [![React](https://img.shields.io/badge/React_19-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)](https://react.dev/)
 [![License](https://img.shields.io/github/license/Xueyang-Song/paper-pilot?style=for-the-badge&color=green)](LICENSE)
+[![CI](https://github.com/Xueyang-Song/paper-pilot/actions/workflows/ci.yml/badge.svg)](https://github.com/Xueyang-Song/paper-pilot/actions/workflows/ci.yml)
+[![Release](https://github.com/Xueyang-Song/paper-pilot/actions/workflows/release.yml/badge.svg)](https://github.com/Xueyang-Song/paper-pilot/actions/workflows/release.yml)
 
 **Navigate the sea of academic papers — with AI as your co-pilot.**
 
@@ -47,7 +49,9 @@ You ──▶  Get answers grounded in real papers, not hallucinations
 <td width="50%">
 
 ### 🔍 Multi-Source Paper Crawling
+
 Simultaneously queries **8+ academic databases**:
+
 - OpenAlex, Crossref, Semantic Scholar
 - PubMed/PMC, arXiv, Europe PMC
 - CORE, Unpaywall
@@ -57,6 +61,7 @@ Simultaneously queries **8+ academic databases**:
 <td width="50%">
 
 ### 🤖 AI-Assisted Synthesis
+
 - **Local Ollama** for fully offline operation
 - **OpenAI-compatible** API support
 - Vercel AI Gateway support with non-generating provider health checks
@@ -69,6 +74,7 @@ Simultaneously queries **8+ academic databases**:
 <td width="50%">
 
 ### 🗄️ Smart Local Storage
+
 - **SQLite** with `node:sqlite` (zero dependencies)
 - **FTS5** full-text search across all papers
 - **`sqlite-vec`** vector similarity search
@@ -78,6 +84,7 @@ Simultaneously queries **8+ academic databases**:
 <td width="50%">
 
 ### 📄 PDF → Knowledge Pipeline
+
 - Open-access PDF auto-fetching via Unpaywall
 - **MarkItDown** conversion for AI-ready text
 - Python virtualenv isolation for scripting tools
@@ -92,6 +99,7 @@ Simultaneously queries **8+ academic databases**:
 ## 🚀 Quick Start
 
 **Requirements:**
+
 - Node.js `>= 22.18.0`
 - Python 3.11+
 - (Optional) [Ollama](https://ollama.com/) for local AI
@@ -118,17 +126,17 @@ npm run package
 
 ## 📚 Paper Sources
 
-| Source | Type | API Key Required |
-|--------|------|-----------------|
-| **OpenAlex** | Multidisciplinary | Optional (email) |
-| **Crossref** | Multidisciplinary | Optional (email) |
-| **Semantic Scholar** | CS + Science | Recommended |
-| **PubMed / PMC** | Biomedical | No |
-| **arXiv** | Physics/CS/Math | No |
-| **Europe PMC** | Life Sciences | No |
-| **CORE** | Open Access | **Required** |
-| **Unpaywall** | Open Access PDFs | Optional (email) |
-| **Google Scholar** | All fields | No (experimental ⚠️) |
+| Source               | Type              | API Key Required     |
+| -------------------- | ----------------- | -------------------- |
+| **OpenAlex**         | Multidisciplinary | Optional (email)     |
+| **Crossref**         | Multidisciplinary | Optional (email)     |
+| **Semantic Scholar** | CS + Science      | Recommended          |
+| **PubMed / PMC**     | Biomedical        | No                   |
+| **arXiv**            | Physics/CS/Math   | No                   |
+| **Europe PMC**       | Life Sciences     | No                   |
+| **CORE**             | Open Access       | **Required**         |
+| **Unpaywall**        | Open Access PDFs  | Optional (email)     |
+| **Google Scholar**   | All fields        | No (experimental ⚠️) |
 
 ---
 
@@ -170,14 +178,14 @@ paper-pilot/
 
 This is an **early v1** — buildable, test-covered, but still hardening for production-level reliability.
 
-| Area | Status |
-|------|--------|
-| Core crawlers (OpenAlex, Crossref, arXiv, PubMed) | ✅ Stable |
-| SQLite + FTS5 + vector search | ✅ Stable |
-| AI agent (Ollama / OpenAI-compatible) | ✅ Stable |
-| Google Scholar crawler | ⚠️ Experimental |
-| macOS / Linux packaging | ⚠️ Untested |
-| Cloud sync / collaboration | ❌ Not planned |
+| Area                                              | Status          |
+| ------------------------------------------------- | --------------- |
+| Core crawlers (OpenAlex, Crossref, arXiv, PubMed) | ✅ Stable       |
+| SQLite + FTS5 + vector search                     | ✅ Stable       |
+| AI agent (Ollama / OpenAI-compatible)             | ✅ Stable       |
+| Google Scholar crawler                            | ⚠️ Experimental |
+| macOS / Linux packaging                           | ⚠️ Untested     |
+| Cloud sync / collaboration                        | ❌ Not planned  |
 
 ---
 
@@ -186,12 +194,17 @@ This is an **early v1** — buildable, test-covered, but still hardening for pro
 Contributions welcome. Please open an issue before large PRs to discuss approach.
 
 ```bash
-npm run verify                 # Typecheck, tests, and production build
+npm run verify                 # Format, lint, typecheck, coverage, and build
+npm run format:check           # Check repository formatting
+npm run lint                   # Run ESLint with zero warnings
 npm run test                   # Run test suite (Vitest)
+npm run test:coverage          # Run tests with enforced coverage thresholds
 npm run typecheck              # TypeScript strict checks
 npm run test:crawlers:api      # Live no-key HTTP source smoke
 npm run test:crawlers:browser  # Playwright browser crawler smoke
 ```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the protected PR workflow and automatic release labels.
 
 ---
 
@@ -199,7 +212,7 @@ npm run test:crawlers:browser  # Playwright browser crawler smoke
 
 <img src="https://capsule-render.vercel.app/api?type=waving&color=gradient&customColorList=6,11,20&height=80&section=footer" width="100%"/>
 
-*Built by a researcher, for researchers.*
+_Built by a researcher, for researchers._
 
 [![GitHub](https://img.shields.io/badge/Xueyang--Song-181717?style=flat-square&logo=github)](https://github.com/Xueyang-Song)
 

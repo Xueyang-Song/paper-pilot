@@ -56,14 +56,10 @@ describe("LocalAgentService", () => {
       );
     });
     vi.stubGlobal("fetch", fetchMock);
-    const agent = new LocalAgentService(
-      db,
-      new SourceRegistry(),
-      {} as CrawlService,
-      {} as AiService,
-      jobs,
-      { baseUrl: "http://ollama.test", model: "qwen2.5:0.5b" }
-    );
+    const agent = new LocalAgentService(db, new SourceRegistry(), {} as CrawlService, {} as AiService, jobs, {
+      baseUrl: "http://ollama.test",
+      model: "qwen2.5:0.5b"
+    });
     expect(await agent.available()).toBe(true);
     const result = await agent.run(project.id, "What is in this project?");
     expect(result.content).toBe("Project state inspected.");
@@ -74,14 +70,13 @@ describe("LocalAgentService", () => {
     const project = db.createProject("Hosted provider");
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
-    const agent = new LocalAgentService(
-      db,
-      new SourceRegistry(),
-      {} as CrawlService,
-      {} as AiService,
-      new JobQueue(),
-      { settings: settingsService({ provider: "vercel", baseUrl: "https://ai-gateway.vercel.sh/v1", model: "openai/gpt-5.4" }) }
-    );
+    const agent = new LocalAgentService(db, new SourceRegistry(), {} as CrawlService, {} as AiService, new JobQueue(), {
+      settings: settingsService({
+        provider: "vercel",
+        baseUrl: "https://ai-gateway.vercel.sh/v1",
+        model: "openai/gpt-5.4"
+      })
+    });
 
     await expect(agent.available()).resolves.toBe(false);
     await expect(agent.run(project.id, "hello")).rejects.toThrow("disabled");
@@ -96,17 +91,18 @@ describe("LocalAgentService", () => {
       }
       expect(url).toBe("http://configured-ollama.test/api/chat");
       expect(JSON.parse(String(init?.body))).toMatchObject({ model: "configured-model" });
-      return new Response(JSON.stringify({ message: { role: "assistant", content: "Using configured Ollama." } }), { status: 200 });
+      return new Response(JSON.stringify({ message: { role: "assistant", content: "Using configured Ollama." } }), {
+        status: 200
+      });
     });
     vi.stubGlobal("fetch", fetchMock);
-    const agent = new LocalAgentService(
-      db,
-      new SourceRegistry(),
-      {} as CrawlService,
-      {} as AiService,
-      new JobQueue(),
-      { settings: settingsService({ provider: "ollama", baseUrl: "http://configured-ollama.test", model: "configured-model" }) }
-    );
+    const agent = new LocalAgentService(db, new SourceRegistry(), {} as CrawlService, {} as AiService, new JobQueue(), {
+      settings: settingsService({
+        provider: "ollama",
+        baseUrl: "http://configured-ollama.test",
+        model: "configured-model"
+      })
+    });
 
     expect(await agent.available()).toBe(true);
     const result = await agent.run(project.id, "hello");

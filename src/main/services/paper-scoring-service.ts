@@ -98,7 +98,15 @@ const TOP_INSTITUTION_PATTERNS = [
   "allen institute"
 ];
 
-const STRONG_INSTITUTION_HINTS = ["university", "institute", "laboratory", "hospital", "clinic", "research center", "cnrs"];
+const STRONG_INSTITUTION_HINTS = [
+  "university",
+  "institute",
+  "laboratory",
+  "hospital",
+  "clinic",
+  "research center",
+  "cnrs"
+];
 
 export interface PaperScoringResult {
   scoredCount: number;
@@ -112,7 +120,9 @@ export class PaperScoringService {
     const projectPapers = this.db.listPapers(projectId);
     const selectedIds = paperIds ? new Set(paperIds) : undefined;
     const targetPapers = selectedIds ? projectPapers.filter((paper) => selectedIds.has(paper.id)) : projectPapers;
-    const papers = targetPapers.map((paper) => this.db.updatePaperScore(projectId, paper.id, this.scorePaper(paper, projectPapers)));
+    const papers = targetPapers.map((paper) =>
+      this.db.updatePaperScore(projectId, paper.id, this.scorePaper(paper, projectPapers))
+    );
     return { scoredCount: papers.length, papers };
   }
 
@@ -158,7 +168,10 @@ function scoreCitations(paper: Paper, projectPapers: Paper[]): { score: number; 
   }
   const citations = paper.citationCount;
   const globalScore = clamp((Math.log1p(citations) / Math.log1p(1000)) * 100);
-  const maxProjectCitations = Math.max(citations, ...projectPapers.map((projectPaper) => projectPaper.citationCount ?? 0));
+  const maxProjectCitations = Math.max(
+    citations,
+    ...projectPapers.map((projectPaper) => projectPaper.citationCount ?? 0)
+  );
   const projectScore = maxProjectCitations > 0 ? (Math.log1p(citations) / Math.log1p(maxProjectCitations)) * 100 : 45;
   const score = roundScore(globalScore * 0.7 + projectScore * 0.3);
   return {
@@ -329,7 +342,9 @@ function getNestedString(record: Record<string, unknown> | undefined, path: stri
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
-  return typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
 }
 
 function asArray(value: unknown): unknown[] {

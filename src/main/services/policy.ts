@@ -1,6 +1,7 @@
 import type { ProjectPolicy } from "../../shared/schemas.js";
 
-export type PolicyAction = "source-crawl" | "browser-install" | "browser-crawl" | "python-script" | "paid-model-run" | "long-job";
+export type PolicyAction =
+  "source-crawl" | "browser-install" | "browser-crawl" | "python-script" | "paid-model-run" | "long-job";
 
 export function requiresApproval(policy: ProjectPolicy, action: PolicyAction): boolean {
   if (policy.autonomy === "yolo") return false;

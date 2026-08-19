@@ -6,7 +6,17 @@ describe("SourceRegistry", () => {
   it("lists API-first sources plus experimental browser fallback", () => {
     const sources = new SourceRegistry().list();
     expect(sources.map((source) => source.id)).toEqual(
-      expect.arrayContaining(["openalex", "crossref", "semantic-scholar", "pubmed", "arxiv", "europe-pmc", "core", "unpaywall", "google-scholar"])
+      expect.arrayContaining([
+        "openalex",
+        "crossref",
+        "semantic-scholar",
+        "pubmed",
+        "arxiv",
+        "europe-pmc",
+        "core",
+        "unpaywall",
+        "google-scholar"
+      ])
     );
     expect(sources.find((source) => source.id === "google-scholar")?.stable).toBe(false);
   });

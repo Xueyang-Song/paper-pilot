@@ -34,7 +34,11 @@ export async function getJson<T>(url: URL, init: CrawlerRequestInit = {}): Promi
   try {
     return (await response.json()) as T;
   } catch (error) {
-    throw new CrawlHttpError(`Malformed JSON response from ${url.host}: ${formatCrawlerError(error)}`, undefined, false);
+    throw new CrawlHttpError(
+      `Malformed JSON response from ${url.host}: ${formatCrawlerError(error)}`,
+      undefined,
+      false
+    );
   }
 }
 
@@ -85,7 +89,8 @@ export function formatCrawlerError(error: unknown): string {
 }
 
 function withTimeout(init: CrawlerRequestInit): RequestInit {
-  const { timeoutMs = 30000, retries: _retries, signal, ...rest } = init;
+  const { timeoutMs = 30000, signal, ...rest } = init;
+  delete rest.retries;
   const timeoutSignal = AbortSignal.timeout(timeoutMs);
   return {
     ...rest,

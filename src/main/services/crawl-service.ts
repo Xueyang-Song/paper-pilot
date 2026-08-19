@@ -177,7 +177,14 @@ export class CrawlService {
       type: "metadata-json",
       title: `Crawl metadata - ${config.topic}`,
       content: JSON.stringify(
-        { config, papers, warnings, connectorResults, sourceDiagnostics, fullTextArtifactIds: fullTextArtifacts.map((artifact) => artifact.id) },
+        {
+          config,
+          papers,
+          warnings,
+          connectorResults,
+          sourceDiagnostics,
+          fullTextArtifactIds: fullTextArtifacts.map((artifact) => artifact.id)
+        },
         null,
         2
       ),
@@ -197,7 +204,10 @@ export class CrawlService {
       status: "completed",
       progress: 1,
       detail: `Found ${papers.length} open-access papers and downloaded ${fullTextArtifacts.length} PDFs.`,
-      result: { paperCount: papers.length, artifactIds: [metadataArtifact.id, markdownArtifact.id, ...fullTextArtifacts.map((artifact) => artifact.id)] }
+      result: {
+        paperCount: papers.length,
+        artifactIds: [metadataArtifact.id, markdownArtifact.id, ...fullTextArtifacts.map((artifact) => artifact.id)]
+      }
     });
     return { jobId: job.id, papers, artifacts: [metadataArtifact, markdownArtifact, ...fullTextArtifacts], warnings };
   }
@@ -212,7 +222,12 @@ export class CrawlService {
   }
 }
 
-function renderCrawlMarkdown(config: CrawlConfig, papers: Paper[], warnings: string[], diagnostics: SourceDiagnostic[] = []): string {
+function renderCrawlMarkdown(
+  config: CrawlConfig,
+  papers: Paper[],
+  warnings: string[],
+  diagnostics: SourceDiagnostic[] = []
+): string {
   const lines = [
     `# Crawl Digest: ${config.topic}`,
     "",
@@ -225,7 +240,12 @@ function renderCrawlMarkdown(config: CrawlConfig, papers: Paper[], warnings: str
     lines.push("## Warnings", "", ...warnings.map((warning) => `- ${warning}`), "");
   }
   if (diagnostics.length) {
-    lines.push("## Source Diagnostics", "", "| Source | Status | Papers | Duration | Notes |", "| --- | --- | ---: | ---: | --- |");
+    lines.push(
+      "## Source Diagnostics",
+      "",
+      "| Source | Status | Papers | Duration | Notes |",
+      "| --- | --- | ---: | ---: | --- |"
+    );
     for (const diagnostic of diagnostics) {
       lines.push(
         `| ${escapeTable(diagnostic.displayName)} | ${diagnostic.status} | ${diagnostic.paperCount} | ${diagnostic.durationMs}ms | ${escapeTable(

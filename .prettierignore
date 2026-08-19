@@ -1,0 +1,8 @@
+node_modules
+dist
+dist-electron
+release
+coverage
+.vite
+package-lock.json
+LICENSE

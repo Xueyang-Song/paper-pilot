@@ -143,11 +143,7 @@ export function ChatWorkspace(props: {
                   <FileText size={16} />
                   Brief
                 </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setDraft("Crawl open-access papers about ")}
-                >
+                <Button type="button" variant="outline" onClick={() => setDraft("Crawl open-access papers about ")}>
                   <Search size={16} />
                   Crawl
                 </Button>
@@ -187,7 +183,8 @@ export function ChatWorkspace(props: {
                   variant="destructive"
                   size="icon"
                   onClick={() => {
-                    if (window.confirm("Clear this conversation? Project files and papers will remain.")) clearChat.mutate();
+                    if (window.confirm("Clear this conversation? Project files and papers will remain."))
+                      clearChat.mutate();
                   }}
                   disabled={!props.activeProjectId || !messages.length || clearChat.isPending}
                   title="Clear conversation"
@@ -196,10 +193,7 @@ export function ChatWorkspace(props: {
                   <Trash2 size={16} />
                 </Button>
               </div>
-              <Button
-                type="submit"
-                disabled={!draft.trim() || sendChat.isPending}
-              >
+              <Button type="submit" disabled={!draft.trim() || sendChat.isPending}>
                 {sendChat.isPending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
                 Send
               </Button>

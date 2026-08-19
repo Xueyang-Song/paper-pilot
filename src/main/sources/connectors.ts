@@ -1,14 +1,9 @@
 import { XMLParser } from "fast-xml-parser";
 import { z } from "zod";
-import {
-  type CrawlConfig,
-  type Paper,
-  type SourceDefinition,
-  sourceDefinitionSchema
-} from "../../shared/schemas.js";
+import { type CrawlConfig, type Paper, type SourceDefinition, sourceDefinitionSchema } from "../../shared/schemas.js";
 import { id } from "../utils.js";
 import { cleanDoi, firstString, getJson, getText, yearFromDate } from "./http.js";
-import type { CrawlResult, SourceConnector, SourceContext } from "./types.js";
+import type { CrawlResult, SourceConnector } from "./types.js";
 import { emptyResult } from "./types.js";
 
 const emptyCredentialSchema = z.object({}).passthrough();
@@ -47,20 +42,23 @@ export const openAlexConnector: SourceConnector = {
     const url = new URL("https://api.openalex.org/works");
     url.searchParams.set("search", config.topic);
     url.searchParams.set("per-page", String(limit(config)));
-    url.searchParams.set("select", [
-      "id",
-      "doi",
-      "display_name",
-      "publication_year",
-      "publication_date",
-      "authorships",
-      "primary_location",
-      "open_access",
-      "cited_by_count",
-      "abstract_inverted_index",
-      "topics",
-      "primary_topic"
-    ].join(","));
+    url.searchParams.set(
+      "select",
+      [
+        "id",
+        "doi",
+        "display_name",
+        "publication_year",
+        "publication_date",
+        "authorships",
+        "primary_location",
+        "open_access",
+        "cited_by_count",
+        "abstract_inverted_index",
+        "topics",
+        "primary_topic"
+      ].join(",")
+    );
     if (config.sort === "newest") url.searchParams.set("sort", "publication_date:desc");
     if (config.sort === "cited") url.searchParams.set("sort", "cited_by_count:desc");
     const filters = [
@@ -304,7 +302,9 @@ export const pubmedConnector: SourceConnector = {
       .filter(Boolean) as Paper[];
     return {
       papers: config.openAccessOnly ? papers.filter((paper) => paper.isOpenAccess) : papers,
-      warnings: config.openAccessOnly ? ["PubMed metadata does not always expose OA status; PMC-linked papers are retained."] : [],
+      warnings: config.openAccessOnly
+        ? ["PubMed metadata does not always expose OA status; PMC-linked papers are retained."]
+        : [],
       provenance: { searchUrl: search.toString(), summaryUrl: summary.toString() }
     };
   }
@@ -315,8 +315,10 @@ function normalizePubMed(uid: string, item: unknown): Paper | undefined {
   const title = firstString(row?.title);
   if (!row || !title) return undefined;
   const articleIds = Array.isArray(row.articleids) ? row.articleids : [];
-  const doi = articleIds.find((entry) => (entry as Record<string, unknown>).idtype === "doi") as Record<string, unknown> | undefined;
-  const pmc = articleIds.find((entry) => (entry as Record<string, unknown>).idtype === "pmc") as Record<string, unknown> | undefined;
+  const doi = articleIds.find((entry) => (entry as Record<string, unknown>).idtype === "doi") as
+    Record<string, unknown> | undefined;
+  const pmc = articleIds.find((entry) => (entry as Record<string, unknown>).idtype === "pmc") as
+    Record<string, unknown> | undefined;
   return {
     id: id("paper"),
     title,
@@ -373,7 +375,11 @@ function normalizeArxiv(entry: unknown): Paper | undefined {
   const row = entry as Record<string, unknown>;
   const title = firstString(row.title)?.replace(/\s+/g, " ");
   if (!title) return undefined;
-  const links = Array.isArray(row.link) ? (row.link as Record<string, unknown>[]) : row.link ? [row.link as Record<string, unknown>] : [];
+  const links = Array.isArray(row.link)
+    ? (row.link as Record<string, unknown>[])
+    : row.link
+      ? [row.link as Record<string, unknown>]
+      : [];
   const abstractUrl = firstString(row.id);
   const pdf = links.find((link) => link.title === "pdf" || String(link.type).includes("pdf"));
   return {
@@ -382,7 +388,7 @@ function normalizeArxiv(entry: unknown): Paper | undefined {
     abstract: firstString(row.summary)?.replace(/\s+/g, " "),
     authors: Array.isArray(row.author)
       ? (row.author.map((author) => firstString((author as Record<string, unknown>).name)).filter(Boolean) as string[])
-      : [firstString((row.author as Record<string, unknown> | undefined)?.name)].filter(Boolean) as string[],
+      : ([firstString((row.author as Record<string, unknown> | undefined)?.name)].filter(Boolean) as string[]),
     year: yearFromDate(row.published),
     publishedAt: firstString(row.published),
     doi: cleanDoi((row["arxiv:doi"] as Record<string, unknown> | undefined)?.["#text"] ?? row["arxiv:doi"]),
@@ -393,8 +399,10 @@ function normalizeArxiv(entry: unknown): Paper | undefined {
     isOpenAccess: true,
     license: firstString((row["arxiv:license"] as Record<string, unknown> | undefined)?.href),
     fieldsOfStudy: Array.isArray(row.category)
-      ? (row.category.map((category) => firstString((category as Record<string, unknown>).term)).filter(Boolean) as string[])
-      : [firstString((row.category as Record<string, unknown> | undefined)?.term)].filter(Boolean) as string[],
+      ? (row.category
+          .map((category) => firstString((category as Record<string, unknown>).term))
+          .filter(Boolean) as string[])
+      : ([firstString((row.category as Record<string, unknown> | undefined)?.term)].filter(Boolean) as string[]),
     raw: row
   };
 }
@@ -414,7 +422,10 @@ export const europePmcConnector: SourceConnector = {
   crawlConfigSchema: z.object({ topic: z.string(), maxPapers: z.number() }).passthrough(),
   async run(config, context): Promise<CrawlResult> {
     const url = new URL("https://www.ebi.ac.uk/europepmc/webservices/rest/search");
-    const dateClause = config.dateFrom || config.dateTo ? ` AND FIRST_PDATE:[${config.dateFrom ?? "1900-01-01"} TO ${config.dateTo ?? "3000-01-01"}]` : "";
+    const dateClause =
+      config.dateFrom || config.dateTo
+        ? ` AND FIRST_PDATE:[${config.dateFrom ?? "1900-01-01"} TO ${config.dateTo ?? "3000-01-01"}]`
+        : "";
     const oaClause = config.openAccessOnly ? " AND OPEN_ACCESS:y" : "";
     url.searchParams.set("query", `${config.topic}${dateClause}${oaClause}`);
     url.searchParams.set("format", "json");
@@ -500,13 +511,16 @@ function normalizeCore(item: unknown): Paper | undefined {
     title,
     abstract: firstString(row.abstract),
     authors: Array.isArray(row.authors)
-      ? (row.authors.map((author) => firstString((author as Record<string, unknown>).name) ?? firstString(author)).filter(Boolean) as string[])
+      ? (row.authors
+          .map((author) => firstString((author as Record<string, unknown>).name) ?? firstString(author))
+          .filter(Boolean) as string[])
       : [],
     year: typeof row.yearPublished === "number" ? row.yearPublished : yearFromDate(row.publishedDate),
     publishedAt: firstString(row.publishedDate),
     doi: cleanDoi(row.doi),
     url: firstString(row.downloadUrl) ?? firstString(row.url),
-    pdfUrl: firstString(row.downloadUrl) ?? firstString(links.find((link) => firstString(link.type)?.includes("pdf"))?.url),
+    pdfUrl:
+      firstString(row.downloadUrl) ?? firstString(links.find((link) => firstString(link.type)?.includes("pdf"))?.url),
     source: "core",
     sourcePaperId: firstString(row.id),
     venue: firstString(row.publisher),
@@ -531,10 +545,9 @@ export const unpaywallConnector: SourceConnector = {
   credentialSchema: z.object({ email: z.string().email().optional() }).passthrough(),
   crawlConfigSchema: z.object({ topic: z.string() }).passthrough(),
   async run(): Promise<CrawlResult> {
-    return emptyResult(
-      { mode: "doi-enrichment" },
-      ["Unpaywall is a DOI enrichment source, so it runs after papers with DOI metadata are discovered."]
-    );
+    return emptyResult({ mode: "doi-enrichment" }, [
+      "Unpaywall is a DOI enrichment source, so it runs after papers with DOI metadata are discovered."
+    ]);
   }
 };
 
@@ -555,10 +568,9 @@ export const googleScholarConnector: SourceConnector = {
     if (!config.allowBrowserFallback) {
       throw new Error("Google Scholar is experimental and requires browser fallback approval.");
     }
-    return emptyResult(
-      { mode: "playwright-script-required" },
-      ["Google Scholar browser crawling is prepared as an approved Playwright script run, not an API connector."]
-    );
+    return emptyResult({ mode: "playwright-script-required" }, [
+      "Google Scholar browser crawling is prepared as an approved Playwright script run, not an API connector."
+    ]);
   }
 };
 

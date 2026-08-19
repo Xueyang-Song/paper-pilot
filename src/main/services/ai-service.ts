@@ -20,7 +20,10 @@ export class AiService {
     private readonly jobs: JobQueue
   ) {}
 
-  async generateResearchBrief(projectId: string, prompt: string): Promise<{ content: string; artifactId: string; jobId: string }> {
+  async generateResearchBrief(
+    projectId: string,
+    prompt: string
+  ): Promise<{ content: string; artifactId: string; jobId: string }> {
     const project = this.db.getProject(projectId);
     if (!project) throw new Error(`Project not found: ${projectId}`);
     const job = this.jobs.create({ projectId, kind: "brief", status: "running", title: "Generating research brief" });
@@ -40,18 +43,27 @@ export class AiService {
       } catch (error) {
         providerError = formatProviderError(error);
         aiWarning = formatOllamaFallbackWarning(error);
-        this.jobs.update(job.id, { progress: 0.55, detail: "Local Ollama model failed; using local structured synthesis." });
+        this.jobs.update(job.id, {
+          progress: 0.55,
+          detail: "Local Ollama model failed; using local structured synthesis."
+        });
         content = [aiWarning, "", localBrief(project.title, prompt, papers, chunks)].join("\n");
       }
     } else if (settings.ai.hasApiKey) {
-      this.jobs.update(job.id, { progress: 0.35, detail: `Calling configured ${providerLabel(settings.ai.provider)} model.` });
+      this.jobs.update(job.id, {
+        progress: 0.35,
+        detail: `Calling configured ${providerLabel(settings.ai.provider)} model.`
+      });
       try {
         content = await this.callGateway(settings, renderBriefPrompt(project.title, prompt, papers, chunks));
         model = settings.ai.model;
       } catch (error) {
         providerError = formatProviderError(error);
         aiWarning = formatAiGatewayFallbackWarning(error);
-        this.jobs.update(job.id, { progress: 0.55, detail: "Configured AI model failed; using local structured synthesis." });
+        this.jobs.update(job.id, {
+          progress: 0.55,
+          detail: "Configured AI model failed; using local structured synthesis."
+        });
         content = [aiWarning, "", localBrief(project.title, prompt, papers, chunks)].join("\n");
       }
     } else {
@@ -64,7 +76,15 @@ export class AiService {
       title: `Research brief - ${project.title}`,
       content,
       source: "ai-service",
-      metadata: { prompt, paperCount: papers.length, provider: settings.ai.provider, model, attemptedModel, providerError, aiWarning },
+      metadata: {
+        prompt,
+        paperCount: papers.length,
+        provider: settings.ai.provider,
+        model,
+        attemptedModel,
+        providerError,
+        aiWarning
+      },
       indexText: true
     });
     this.jobs.update(job.id, {
@@ -144,7 +164,9 @@ export class AiService {
     const hasApiKey = this.credentials.has("ai-gateway");
     try {
       if (ai.provider === "ollama") {
-        const response = await fetch(`${trimTrailingSlash(ai.baseUrl)}/api/tags`, { signal: AbortSignal.timeout(2500) });
+        const response = await fetch(`${trimTrailingSlash(ai.baseUrl)}/api/tags`, {
+          signal: AbortSignal.timeout(2500)
+        });
         if (!response.ok) throw new Error(`Ollama returned ${response.status}.`);
         const data = (await response.json()) as { models?: Array<{ name?: string }> };
         const models = (data.models ?? []).map((model) => model.name).filter((name): name is string => Boolean(name));
@@ -283,7 +305,9 @@ function localBrief(
 ): string {
   const top = papers.slice(0, 12);
   const byYear = top.filter((paper) => paper.year).sort((a, b) => (b.year ?? 0) - (a.year ?? 0));
-  const cited = top.filter((paper) => paper.citationCount).sort((a, b) => (b.citationCount ?? 0) - (a.citationCount ?? 0));
+  const cited = top
+    .filter((paper) => paper.citationCount)
+    .sort((a, b) => (b.citationCount ?? 0) - (a.citationCount ?? 0));
   return [
     `# Research Brief: ${projectTitle}`,
     "",
@@ -297,7 +321,12 @@ function localBrief(
     "",
     "## Strongest Signals",
     "",
-    ...(cited.slice(0, 5).map((paper, index) => `- ${paper.title} [P${papers.indexOf(paper) + 1}]${paper.citationCount ? `, ${paper.citationCount} citations` : ""}`) || []),
+    ...(cited
+      .slice(0, 5)
+      .map(
+        (paper) =>
+          `- ${paper.title} [P${papers.indexOf(paper) + 1}]${paper.citationCount ? `, ${paper.citationCount} citations` : ""}`
+      ) || []),
     "",
     "## Recent Work",
     "",
