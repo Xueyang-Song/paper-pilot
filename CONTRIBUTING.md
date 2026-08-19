@@ -29,6 +29,8 @@ Every squash merge creates a signed Windows GitHub Release. Choose at most one v
 - `release:minor`: minor release, such as `v1.2.3` to `v1.3.0`.
 - `release:major`: major release, such as `v1.2.3` to `v2.0.0`.
 
+For a pre-1.0 example, applying `release:minor` after `v0.2.5` produces `v0.3.0`; it does not increment the patch component.
+
 Git tags are the version source of truth. The release workflow injects the calculated version into the signed package, while the checked-in manifest stays at `0.0.0-development`.
 
 If publishing fails after merge, rerun the failed workflow. For recovery, manually dispatch the Release workflow with the merge commit SHA; it will reuse the existing version and repair incomplete assets.

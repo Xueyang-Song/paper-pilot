@@ -119,7 +119,7 @@ jobs:
 
   gate:
     name: Gate
-    if: ${{ always() }}
+    if: ${{ always() && !cancelled() }}
     needs: [quality, windows, codeql, dependency-review, release-policy]
     runs-on: ubuntu-latest
     timeout-minutes: 5
