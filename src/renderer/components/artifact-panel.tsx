@@ -84,6 +84,8 @@ export function ArtifactPanel({
     onSuccess: () => refreshProject(projectId, queryClient)
   });
   const artifactRows = useMemo(() => buildArtifactRows(artifacts, papers), [artifacts, papers]);
+  const generatedRows = artifactRows.filter((row) => row.artifact.type === "chat-answer");
+  const sourceRows = artifactRows.filter((row) => row.artifact.type !== "chat-answer");
   const scoredCount = papers.filter((paper) => Boolean(paper.score)).length;
   const selectedArtifactIds = [...selectedIds].filter((artifactId) =>
     artifacts.some((artifact) => artifact.id === artifactId)
@@ -185,7 +187,29 @@ export function ArtifactPanel({
             </div>
           ) : null}
           <div className="flex min-w-0 flex-col gap-2">
-            {artifactRows.map(({ artifact, scoreTarget, sourceLabel }) => (
+            {generatedRows.length ? (
+              <div className="mt-1 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                Generated answers · {generatedRows.length}
+              </div>
+            ) : null}
+            {generatedRows.map(({ artifact, scoreTarget, sourceLabel }) => (
+              <ArtifactFileCard
+                key={artifact.id}
+                artifact={artifact}
+                scoreTarget={scoreTarget}
+                sourceLabel={sourceLabel}
+                projectId={projectId}
+                selected={selectedIds.has(artifact.id)}
+                onToggleSelected={() => toggleSelected(artifact.id)}
+                onOpenArtifact={onOpenArtifact}
+              />
+            ))}
+            {sourceRows.length ? (
+              <div className="mt-2 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                Sources and project files · {sourceRows.length}
+              </div>
+            ) : null}
+            {sourceRows.map(({ artifact, scoreTarget, sourceLabel }) => (
               <ArtifactFileCard
                 key={artifact.id}
                 artifact={artifact}

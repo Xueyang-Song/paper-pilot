@@ -38,6 +38,17 @@ Use this checklist for fundamentals/stabilization passes before adding another m
 - [ ] Use previous/next hit buttons and confirm the active highlight changes.
 - [ ] In Settings, switch between Ollama, Vercel AI Gateway, and OpenAI-compatible providers and run the provider health check.
 - [ ] Confirm hosted providers without a stored key show a warning without making a generation request.
+- [ ] Create two named chats in one project and confirm their histories and context remain isolated.
+- [ ] Rename, export, and delete a chat; confirm deleting it does not delete its generated answer artifacts.
+- [ ] In Grounded mode, ask a corpus question and confirm every research block has clickable evidence markers.
+- [ ] Click citations for paper metadata and document chunks; confirm the evidence panel shows the exact excerpt and locator.
+- [ ] Pin one paper or artifact, send a request, and confirm retrieval is constrained to that source and the pins clear afterward.
+- [ ] Ask a Grounded question in an empty project and confirm Paper Pilot reports insufficient evidence without calling a model.
+- [ ] Switch to Exploratory mode and confirm both the composer and completed answer show the model-knowledge warning.
+- [ ] Stop an in-progress local and hosted response; confirm the partial message is marked stopped and no answer artifact is created.
+- [ ] Expand the run trace and confirm it shows retrieval/tool/provider/citation phases but no credentials or hidden reasoning.
+- [ ] Confirm each successful answer creates exactly one item under Generated answers and that reindexing does not make it searchable or groundable.
+- [ ] Create enough chat history to exceed context capacity and confirm omitted-history counts are visible.
 - [ ] Generate a research brief with Ollama selected as the AI provider.
 - [ ] Temporarily break the selected provider and confirm brief generation falls back to local structured synthesis with provider/model/error metadata.
 - [ ] Restart the app.

@@ -7,7 +7,8 @@ import {
   artifactUpdateSchema,
   appSettingsSchema,
   aiProviderCheckRequestSchema,
-  chatRequestSchema,
+  chatModeSchema,
+  chatRunEventSchema,
   credentialUpsertSchema,
   crawlConfigSchema,
   paperSchema,
@@ -15,14 +16,17 @@ import {
   projectUpdateSchema,
   reindexRequestSchema,
   searchRequestSchema,
+  startChatRunRequestSchema,
   type Artifact,
+  type ChatRun,
+  type Citation,
+  type Conversation,
   type Paper,
   type ProjectPolicy
 } from "../shared/schemas.js";
 import type { PaperPilotDb } from "./db.js";
 import { id, projectDataPath, safeFilename } from "./utils.js";
 import type { SourceRegistry } from "./sources/registry.js";
-import type { AgentService } from "./services/agent-service.js";
 import type { AiService } from "./services/ai-service.js";
 import type { ArtifactService } from "./services/artifact-service.js";
 import type { CredentialService } from "./services/credential-service.js";
@@ -31,6 +35,7 @@ import type { JobQueue } from "./services/job-queue.js";
 import type { PaperScoringService } from "./services/paper-scoring-service.js";
 import type { PythonService } from "./services/python-service.js";
 import type { SearchService } from "./services/search-service.js";
+import type { ResearchChatService } from "./services/research-chat-service.js";
 import type { SettingsService } from "./services/settings-service.js";
 import type { UpdateService } from "./services/update-service.js";
 
@@ -40,7 +45,7 @@ const MAX_TEXT_VIEW_BYTES = 2 * 1024 * 1024;
 export interface IpcServices {
   db: PaperPilotDb;
   registry: SourceRegistry;
-  agent: AgentService;
+  researchChat: ResearchChatService;
   crawl: CrawlService;
   ai: AiService;
   artifacts: ArtifactService;
@@ -91,8 +96,10 @@ export function registerIpc(services: IpcServices): void {
     const id = z.string().parse(projectId);
     const project = services.db.getProject(id);
     if (!project) throw new Error(`Project not found: ${id}`);
+    services.db.ensureDefaultConversation(id);
     return {
       project,
+      conversations: services.db.listConversations(id),
       messages: services.db.listMessages(id),
       artifacts: services.db.listArtifacts(id),
       papers: services.db.listPapers(id),
@@ -127,6 +134,9 @@ export function registerIpc(services: IpcServices): void {
 
   ipcMain.handle("projects:delete", async (_event, input: unknown) => {
     const parsed = z.object({ projectId: z.string() }).parse(input);
+    if (services.researchChat.isProjectActive(parsed.projectId)) {
+      throw new Error("Stop active research responses before deleting this project.");
+    }
     services.db.deleteProject(parsed.projectId);
     await rm(projectDataPath(services.dataRoot, parsed.projectId), { recursive: true, force: true });
     return { ok: true };
@@ -173,25 +183,111 @@ export function registerIpc(services: IpcServices): void {
     return services.db.updateProjectPolicy(parsed.projectId, parsed.patch as Partial<ProjectPolicy>);
   });
 
-  ipcMain.handle("chat:send", (_event, input: unknown) => services.agent.handleChat(chatRequestSchema.parse(input)));
+  ipcMain.handle("conversations:list", (_event, projectIdInput: unknown) => {
+    const projectId = z.string().parse(projectIdInput);
+    services.db.ensureDefaultConversation(projectId);
+    return services.db.listConversations(projectId);
+  });
+
+  ipcMain.handle("conversations:create", (_event, input: unknown) => {
+    const parsed = z
+      .object({
+        projectId: z.string(),
+        title: z.string().trim().min(1).max(120).optional(),
+        mode: chatModeSchema.optional()
+      })
+      .parse(input);
+    return services.db.createConversation(parsed.projectId, parsed.title, parsed.mode);
+  });
+
+  ipcMain.handle("conversations:update", (_event, input: unknown) => {
+    const parsed = z
+      .object({
+        conversationId: z.string(),
+        title: z.string().trim().min(1).max(120).optional(),
+        mode: chatModeSchema.optional()
+      })
+      .parse(input);
+    return services.db.updateConversation(parsed.conversationId, { title: parsed.title, mode: parsed.mode });
+  });
+
+  ipcMain.handle("conversations:delete", (_event, conversationIdInput: unknown) => {
+    const conversationId = z.string().parse(conversationIdInput);
+    if (services.researchChat.isConversationActive(conversationId)) {
+      throw new Error("Stop the active response before deleting this conversation.");
+    }
+    return services.db.deleteConversation(conversationId);
+  });
+
+  ipcMain.handle("conversations:messages", (_event, input: unknown) => {
+    const parsed = z.object({ projectId: z.string(), conversationId: z.string() }).parse(input);
+    return services.db.listMessages(parsed.projectId, parsed.conversationId);
+  });
+
+  ipcMain.handle("conversations:runs", (_event, conversationIdInput: unknown) =>
+    services.db.listChatRuns(z.string().parse(conversationIdInput))
+  );
+
+  ipcMain.handle("chat:citations", (_event, runIdInput: unknown) =>
+    services.db.listCitations(z.string().parse(runIdInput))
+  );
+
+  ipcMain.handle("chat:start", async (event, input: unknown) => {
+    const parsed = startChatRunRequestSchema.parse(input);
+    return services.researchChat.start(parsed, (runEvent) => {
+      const validated = chatRunEventSchema.parse(runEvent);
+      if (!event.sender.isDestroyed()) event.sender.send("chat:run-event", validated);
+    });
+  });
+
+  ipcMain.handle("chat:cancel", (_event, runIdInput: unknown) => ({
+    cancelled: services.researchChat.cancel(z.string().parse(runIdInput))
+  }));
 
   ipcMain.handle("chat:clear", (_event, input: unknown) => {
-    const parsed = z.object({ projectId: z.string() }).parse(input);
-    return { cleared: services.db.clearMessages(parsed.projectId) };
+    const parsed = z.object({ projectId: z.string(), conversationId: z.string().optional() }).parse(input);
+    return { cleared: services.db.clearMessages(parsed.projectId, parsed.conversationId) };
   });
 
   ipcMain.handle("chat:export", async (_event, input: unknown) => {
-    const parsed = z.object({ projectId: z.string() }).parse(input);
+    const parsed = z.object({ projectId: z.string(), conversationId: z.string().optional() }).parse(input);
     const project = services.db.getProject(parsed.projectId);
     if (!project) throw new Error(`Project not found: ${parsed.projectId}`);
+    const conversation = parsed.conversationId ? services.db.getConversation(parsed.conversationId) : undefined;
     const result = await dialog.showSaveDialog({
       title: "Export conversation",
-      defaultPath: `${safeFilename(project.title)}-conversation.md`,
+      defaultPath: `${safeFilename(project.title)}-${safeFilename(conversation?.title ?? "conversation")}.md`,
       filters: [{ name: "Markdown", extensions: ["md"] }]
     });
     if (result.canceled || !result.filePath) return { ok: false };
-    const messages = services.db.listMessages(parsed.projectId);
-    const content = messages.map((message) => `## ${message.role}\n\n${message.content}`).join("\n\n");
+    const messages = services.db.listMessages(parsed.projectId, parsed.conversationId);
+    const content = [
+      `# ${conversation?.title ?? project.title}`,
+      "",
+      `Project: ${project.title}`,
+      ...(conversation ? [`Mode: ${conversation.mode}`] : []),
+      "",
+      ...messages.flatMap((message) => {
+        const citations = message.runId ? services.db.listCitations(message.runId) : [];
+        return [
+          `## ${message.role}`,
+          "",
+          message.content,
+          ...(citations.length
+            ? [
+                "",
+                "### Evidence",
+                "",
+                ...citations.map(
+                  (citation) =>
+                    `- **${citation.evidenceId}: ${citation.title}**${citation.locator ? ` (${citation.locator})` : ""}`
+                )
+              ]
+            : []),
+          ""
+        ];
+      })
+    ].join("\n");
     await writeFile(result.filePath, content, "utf8");
     return { ok: true, path: result.filePath, count: messages.length };
   });
@@ -514,10 +610,13 @@ function titleBarOverlayOptions(theme: "light" | "dark") {
 }
 
 interface ProjectExportBundle {
-  version: 1;
+  version: 1 | 2;
   exportedAt: string;
   project: ReturnType<PaperPilotDb["getProject"]>;
+  conversations?: Conversation[];
   messages: ReturnType<PaperPilotDb["listMessages"]>;
+  runs?: ChatRun[];
+  citations?: Citation[];
   papers: Paper[];
   artifacts: Array<Artifact & { filename: string; contentBase64: string }>;
 }
@@ -533,10 +632,16 @@ async function buildProjectExportBundle(services: IpcServices, projectId: string
     }))
   );
   return {
-    version: 1,
+    version: 2,
     exportedAt: new Date().toISOString(),
     project,
+    conversations: services.db.listConversations(projectId),
     messages: services.db.listMessages(projectId),
+    runs: services.db.listConversations(projectId).flatMap((conversation) => services.db.listChatRuns(conversation.id)),
+    citations: services.db
+      .listConversations(projectId)
+      .flatMap((conversation) => services.db.listChatRuns(conversation.id))
+      .flatMap((run) => services.db.listCitations(run.id)),
     papers: services.db.listPapers(projectId),
     artifacts
   };
@@ -581,17 +686,88 @@ async function importProjectBundle(services: IpcServices, bundle: ProjectExportB
       source: artifactInput.source,
       parentArtifactId,
       metadata,
-      indexText: true
+      indexText: artifactInput.type !== "chat-answer"
     });
     artifactIdMap.set(artifactInput.id, artifact.id);
   }
+  const defaultConversation = services.db.ensureDefaultConversation(project.id);
+  const conversationIdMap = new Map<string, string>();
+  for (const [index, conversationInput] of (bundle.conversations ?? []).entries()) {
+    const conversation =
+      index === 0
+        ? services.db.updateConversation(defaultConversation.id, {
+            title: conversationInput.title,
+            mode: conversationInput.mode
+          })
+        : services.db.createConversation(project.id, conversationInput.title, conversationInput.mode);
+    conversationIdMap.set(conversationInput.id, conversation.id);
+  }
+  const runIdMap = new Map((bundle.runs ?? []).map((run) => [run.id, id("run")]));
+  const messageIdMap = new Map<string, string>();
   for (const message of bundle.messages ?? []) {
-    services.db.appendMessage({
+    const saved = services.db.appendMessage({
       projectId: project.id,
+      conversationId: message.conversationId
+        ? (conversationIdMap.get(message.conversationId) ?? defaultConversation.id)
+        : defaultConversation.id,
+      runId: message.runId ? runIdMap.get(message.runId) : undefined,
       role: message.role,
       content: message.content,
+      status: message.status,
       metadata: message.metadata
     });
+    messageIdMap.set(message.id, saved.id);
+  }
+  for (const artifactInput of bundle.artifacts ?? []) {
+    if (artifactInput.type !== "chat-answer") continue;
+    const mappedArtifactId = artifactIdMap.get(artifactInput.id);
+    if (!mappedArtifactId) continue;
+    const imported = services.db.getArtifact(project.id, mappedArtifactId);
+    if (!imported) continue;
+    const metadata = { ...imported.metadata };
+    if (typeof metadata.conversationId === "string") {
+      metadata.conversationId = conversationIdMap.get(metadata.conversationId) ?? metadata.conversationId;
+    }
+    if (typeof metadata.runId === "string") metadata.runId = runIdMap.get(metadata.runId) ?? metadata.runId;
+    if (typeof metadata.messageId === "string") {
+      metadata.messageId = messageIdMap.get(metadata.messageId) ?? metadata.messageId;
+    }
+    services.db.updateArtifact(project.id, mappedArtifactId, { metadata });
+  }
+  for (const run of bundle.runs ?? []) {
+    services.db.saveChatRun({
+      ...run,
+      id: runIdMap.get(run.id)!,
+      projectId: project.id,
+      conversationId: conversationIdMap.get(run.conversationId) ?? defaultConversation.id,
+      userMessageId: messageIdMap.get(run.userMessageId) ?? run.userMessageId,
+      assistantMessageId: run.assistantMessageId ? messageIdMap.get(run.assistantMessageId) : undefined,
+      outputArtifactId: run.outputArtifactId ? artifactIdMap.get(run.outputArtifactId) : undefined,
+      status: run.status === "running" || run.status === "queued" ? "failed" : run.status,
+      error:
+        run.status === "running" || run.status === "queued"
+          ? "Imported run was incomplete in the source project."
+          : run.error,
+      createdAt: run.createdAt,
+      updatedAt: run.updatedAt
+    });
+  }
+  const citationsByRun = new Map<string, Citation[]>();
+  for (const citation of bundle.citations ?? []) {
+    const mappedRunId = runIdMap.get(citation.runId);
+    if (!mappedRunId) continue;
+    const mapped: Citation = {
+      ...citation,
+      id: id("cite"),
+      runId: mappedRunId,
+      messageId: citation.messageId ? messageIdMap.get(citation.messageId) : undefined,
+      paperId: citation.paperId ? paperIdMap.get(citation.paperId) : undefined,
+      artifactId: citation.artifactId ? artifactIdMap.get(citation.artifactId) : undefined
+    };
+    citationsByRun.set(mappedRunId, [...(citationsByRun.get(mappedRunId) ?? []), mapped]);
+  }
+  for (const [runId, citations] of citationsByRun) {
+    services.db.replaceCitations(runId, citations);
   }
   return services.db.getProject(project.id) ?? project;
 }

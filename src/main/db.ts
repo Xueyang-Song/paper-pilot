@@ -5,6 +5,13 @@ import { dirname } from "node:path";
 import {
   type Artifact,
   artifactSchema,
+  type ChatMode,
+  type ChatRun,
+  chatRunSchema,
+  type Citation,
+  citationSchema,
+  type Conversation,
+  conversationSchema,
   type Job,
   jobSchema,
   type Message,
@@ -95,6 +102,15 @@ export class PaperPilotDb {
       CREATE TABLE IF NOT EXISTS project_policies (
         project_id TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
         policy_json TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS conversations (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        title TEXT NOT NULL,
+        mode TEXT NOT NULL DEFAULT 'grounded',
+        created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
 
@@ -237,6 +253,44 @@ export class PaperPilotDb {
         updated_at TEXT NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS chat_runs (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+        user_message_id TEXT NOT NULL,
+        assistant_message_id TEXT,
+        output_artifact_id TEXT REFERENCES artifacts(id) ON DELETE SET NULL,
+        provider TEXT NOT NULL,
+        model TEXT NOT NULL,
+        mode TEXT NOT NULL,
+        status TEXT NOT NULL,
+        source_refs_json TEXT NOT NULL,
+        included_message_count INTEGER NOT NULL DEFAULT 0,
+        omitted_message_count INTEGER NOT NULL DEFAULT 0,
+        trace_json TEXT NOT NULL,
+        error TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS chat_citations (
+        id TEXT PRIMARY KEY,
+        run_id TEXT NOT NULL REFERENCES chat_runs(id) ON DELETE CASCADE,
+        message_id TEXT,
+        evidence_id TEXT NOT NULL,
+        source_type TEXT NOT NULL,
+        paper_id TEXT REFERENCES papers(id) ON DELETE SET NULL,
+        artifact_id TEXT REFERENCES artifacts(id) ON DELETE SET NULL,
+        chunk_id TEXT,
+        title TEXT NOT NULL,
+        excerpt TEXT NOT NULL,
+        page INTEGER,
+        locator TEXT,
+        doi TEXT,
+        url TEXT,
+        retrieval_score REAL
+      );
+
       CREATE TABLE IF NOT EXISTS reports (
         id TEXT PRIMARY KEY,
         project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -254,6 +308,22 @@ export class PaperPilotDb {
     this.ensureColumn("papers", "user_status", "TEXT NOT NULL DEFAULT 'unread'");
     this.ensureColumn("papers", "tags_json", "TEXT NOT NULL DEFAULT '[]'");
     this.ensureColumn("papers", "notes", "TEXT");
+    this.ensureColumn("messages", "conversation_id", "TEXT");
+    this.ensureColumn("messages", "run_id", "TEXT");
+    this.ensureColumn("messages", "status", "TEXT NOT NULL DEFAULT 'completed'");
+    this.ensureColumn("tool_runs", "run_id", "TEXT");
+    this.backfillConversations();
+    this.db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_conversations_project_updated
+        ON conversations(project_id, updated_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_messages_conversation_created
+        ON messages(conversation_id, created_at ASC);
+      CREATE INDEX IF NOT EXISTS idx_chat_runs_conversation_created
+        ON chat_runs(conversation_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_chat_citations_run
+        ON chat_citations(run_id, evidence_id);
+      PRAGMA user_version = 2;
+    `);
     if (this.vecAvailable) {
       this.db.exec(`
         CREATE VIRTUAL TABLE IF NOT EXISTS chunk_embeddings_vec USING vec0(
@@ -261,6 +331,40 @@ export class PaperPilotDb {
           +chunk_id text
         );
       `);
+    }
+  }
+
+  private backfillConversations(): void {
+    const projects = this.db.prepare("SELECT id, created_at, updated_at FROM projects").all() as Row[];
+    const insert = this.db.prepare(
+      `INSERT INTO conversations (id, project_id, title, mode, created_at, updated_at)
+       VALUES (?, ?, ?, 'grounded', ?, ?)`
+    );
+    const updateMessages = this.db.prepare(
+      "UPDATE messages SET conversation_id = ? WHERE project_id = ? AND conversation_id IS NULL"
+    );
+    for (const project of projects) {
+      const existing = this.db
+        .prepare("SELECT id FROM conversations WHERE project_id = ? ORDER BY created_at ASC LIMIT 1")
+        .get(String(project.id)) as Row | undefined;
+      const conversationId = existing ? String(existing.id) : id("conv");
+      if (!existing) {
+        const messageCount = Number(
+          (
+            this.db
+              .prepare("SELECT COUNT(*) AS count FROM messages WHERE project_id = ?")
+              .get(String(project.id)) as Row
+          ).count ?? 0
+        );
+        insert.run(
+          conversationId,
+          String(project.id),
+          messageCount ? "Existing conversation" : "New chat",
+          String(project.created_at),
+          String(project.updated_at)
+        );
+      }
+      updateMessages.run(conversationId, String(project.id));
     }
   }
 
@@ -401,43 +505,300 @@ export class PaperPilotDb {
     return policy;
   }
 
-  appendMessage(input: Omit<Message, "id" | "createdAt"> & { id?: string; createdAt?: string }): Message {
+  createConversation(projectId: string, title = "New chat", mode: ChatMode = "grounded"): Conversation {
+    if (!this.getProject(projectId)) throw new Error(`Project not found: ${projectId}`);
+    const createdAt = nowIso();
+    const conversation = conversationSchema.parse({
+      id: id("conv"),
+      projectId,
+      title: title.trim() || "New chat",
+      mode,
+      createdAt,
+      updatedAt: createdAt
+    });
+    this.db
+      .prepare(
+        `INSERT INTO conversations (id, project_id, title, mode, created_at, updated_at)
+         VALUES (@id, @projectId, @title, @mode, @createdAt, @updatedAt)`
+      )
+      .run(conversation);
+    this.touchProject(projectId);
+    return conversation;
+  }
+
+  ensureDefaultConversation(projectId: string): Conversation {
+    return this.listConversations(projectId)[0] ?? this.createConversation(projectId);
+  }
+
+  listConversations(projectId: string): Conversation[] {
+    return (
+      this.db
+        .prepare("SELECT * FROM conversations WHERE project_id = ? ORDER BY updated_at DESC, created_at ASC")
+        .all(projectId) as Row[]
+    ).map((row) => this.conversationFromRow(row));
+  }
+
+  getConversation(conversationId: string): Conversation | undefined {
+    const row = this.db.prepare("SELECT * FROM conversations WHERE id = ?").get(conversationId) as Row | undefined;
+    return row ? this.conversationFromRow(row) : undefined;
+  }
+
+  updateConversation(conversationId: string, patch: { title?: string; mode?: ChatMode }): Conversation {
+    const conversation = this.getConversation(conversationId);
+    if (!conversation) throw new Error(`Conversation not found: ${conversationId}`);
+    const title = patch.title === undefined ? conversation.title : patch.title.trim();
+    if (!title) throw new Error("Conversation title cannot be empty.");
+    const updatedAt = nowIso();
+    this.db
+      .prepare("UPDATE conversations SET title = ?, mode = ?, updated_at = ? WHERE id = ?")
+      .run(title, patch.mode ?? conversation.mode, updatedAt, conversationId);
+    this.touchProject(conversation.projectId);
+    return this.getConversation(conversationId)!;
+  }
+
+  deleteConversation(conversationId: string): Conversation {
+    const conversation = this.getConversation(conversationId);
+    if (!conversation) throw new Error(`Conversation not found: ${conversationId}`);
+    this.db.exec("BEGIN");
+    try {
+      this.db.prepare("DELETE FROM messages WHERE conversation_id = ?").run(conversationId);
+      this.db
+        .prepare("DELETE FROM tool_runs WHERE run_id IN (SELECT id FROM chat_runs WHERE conversation_id = ?)")
+        .run(conversationId);
+      this.db.prepare("DELETE FROM chat_runs WHERE conversation_id = ?").run(conversationId);
+      this.db.prepare("DELETE FROM conversations WHERE id = ?").run(conversationId);
+      this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+    this.touchProject(conversation.projectId);
+    return conversation;
+  }
+
+  appendMessage(
+    input: Omit<Message, "id" | "createdAt" | "status"> & {
+      id?: string;
+      createdAt?: string;
+      status?: Message["status"];
+    }
+  ): Message {
     const message: Message = {
       id: input.id ?? id("msg"),
       projectId: input.projectId,
+      conversationId: input.conversationId,
+      runId: input.runId,
       role: input.role,
       content: input.content,
+      status: input.status ?? "completed",
       metadata: input.metadata ?? {},
       createdAt: input.createdAt ?? nowIso()
     };
     this.db
       .prepare(
-        `INSERT INTO messages (id, project_id, role, content, metadata_json, created_at)
-         VALUES (@id, @projectId, @role, @content, @metadataJson, @createdAt)`
+        `INSERT INTO messages (
+          id, project_id, conversation_id, run_id, role, content, status, metadata_json, created_at
+        ) VALUES (
+          @id, @projectId, @conversationId, @runId, @role, @content, @status, @metadataJson, @createdAt
+        )`
       )
       .run({
         id: message.id,
         projectId: message.projectId,
+        conversationId: message.conversationId ?? this.ensureDefaultConversation(message.projectId).id,
+        runId: message.runId ?? null,
         role: message.role,
         content: message.content,
+        status: message.status,
         metadataJson: JSON.stringify(message.metadata),
         createdAt: message.createdAt
       });
+    if (!message.conversationId) message.conversationId = this.ensureDefaultConversation(message.projectId).id;
+    this.db
+      .prepare("UPDATE conversations SET updated_at = ? WHERE id = ?")
+      .run(message.createdAt, message.conversationId);
     this.touchProject(message.projectId);
     return messageSchema.parse(message);
   }
 
-  listMessages(projectId: string): Message[] {
-    return this.db
-      .prepare("SELECT * FROM messages WHERE project_id = ? ORDER BY created_at ASC")
-      .all(projectId)
-      .map((row) => this.messageFromRow(row as Row));
+  listMessages(projectId: string, conversationId?: string): Message[] {
+    const rows = conversationId
+      ? this.db
+          .prepare("SELECT * FROM messages WHERE project_id = ? AND conversation_id = ? ORDER BY created_at ASC")
+          .all(projectId, conversationId)
+      : this.db.prepare("SELECT * FROM messages WHERE project_id = ? ORDER BY created_at ASC").all(projectId);
+    return rows.map((row) => this.messageFromRow(row as Row));
   }
 
-  clearMessages(projectId: string): number {
-    const result = this.db.prepare("DELETE FROM messages WHERE project_id = ?").run(projectId);
+  updateMessage(
+    messageId: string,
+    patch: Partial<Pick<Message, "content" | "status" | "metadata" | "runId">>
+  ): Message {
+    const row = this.db.prepare("SELECT * FROM messages WHERE id = ?").get(messageId) as Row | undefined;
+    if (!row) throw new Error(`Message not found: ${messageId}`);
+    const current = this.messageFromRow(row);
+    const updated = messageSchema.parse({ ...current, ...patch });
+    this.db
+      .prepare("UPDATE messages SET content = ?, status = ?, metadata_json = ?, run_id = ? WHERE id = ?")
+      .run(updated.content, updated.status, JSON.stringify(updated.metadata), updated.runId ?? null, messageId);
+    return updated;
+  }
+
+  clearMessages(projectId: string, conversationId?: string): number {
+    const result = conversationId
+      ? this.db
+          .prepare("DELETE FROM messages WHERE project_id = ? AND conversation_id = ?")
+          .run(projectId, conversationId)
+      : this.db.prepare("DELETE FROM messages WHERE project_id = ?").run(projectId);
     this.touchProject(projectId);
     return Number(result.changes);
+  }
+
+  saveChatRun(run: ChatRun): ChatRun {
+    const parsed = chatRunSchema.parse(run);
+    this.db
+      .prepare(
+        `INSERT INTO chat_runs (
+          id, project_id, conversation_id, user_message_id, assistant_message_id, output_artifact_id,
+          provider, model, mode, status, source_refs_json, included_message_count,
+          omitted_message_count, trace_json, error, created_at, updated_at
+        ) VALUES (
+          @id, @projectId, @conversationId, @userMessageId, @assistantMessageId, @outputArtifactId,
+          @provider, @model, @mode, @status, @sourceRefsJson, @includedMessageCount,
+          @omittedMessageCount, @traceJson, @error, @createdAt, @updatedAt
+        )
+        ON CONFLICT(id) DO UPDATE SET
+          assistant_message_id = excluded.assistant_message_id,
+          output_artifact_id = excluded.output_artifact_id,
+          provider = excluded.provider,
+          model = excluded.model,
+          mode = excluded.mode,
+          status = excluded.status,
+          source_refs_json = excluded.source_refs_json,
+          included_message_count = excluded.included_message_count,
+          omitted_message_count = excluded.omitted_message_count,
+          trace_json = excluded.trace_json,
+          error = excluded.error,
+          updated_at = excluded.updated_at`
+      )
+      .run({
+        id: parsed.id,
+        projectId: parsed.projectId,
+        conversationId: parsed.conversationId,
+        userMessageId: parsed.userMessageId,
+        assistantMessageId: parsed.assistantMessageId ?? null,
+        outputArtifactId: parsed.outputArtifactId ?? null,
+        provider: parsed.provider,
+        model: parsed.model,
+        mode: parsed.mode,
+        status: parsed.status,
+        sourceRefsJson: JSON.stringify(parsed.sourceRefs),
+        includedMessageCount: parsed.includedMessageCount,
+        omittedMessageCount: parsed.omittedMessageCount,
+        traceJson: JSON.stringify(parsed.trace),
+        error: parsed.error ?? null,
+        createdAt: parsed.createdAt,
+        updatedAt: parsed.updatedAt
+      });
+    return parsed;
+  }
+
+  getChatRun(runId: string): ChatRun | undefined {
+    const row = this.db.prepare("SELECT * FROM chat_runs WHERE id = ?").get(runId) as Row | undefined;
+    return row ? this.chatRunFromRow(row) : undefined;
+  }
+
+  listChatRuns(conversationId: string): ChatRun[] {
+    return (
+      this.db
+        .prepare("SELECT * FROM chat_runs WHERE conversation_id = ? ORDER BY created_at DESC")
+        .all(conversationId) as Row[]
+    ).map((row) => this.chatRunFromRow(row));
+  }
+
+  markInterruptedChatRuns(): number {
+    const updatedAt = nowIso();
+    const rows = this.db
+      .prepare("SELECT id, assistant_message_id FROM chat_runs WHERE status IN ('queued', 'running')")
+      .all() as Row[];
+    for (const row of rows) {
+      this.db
+        .prepare("UPDATE chat_runs SET status = 'failed', error = ?, updated_at = ? WHERE id = ?")
+        .run("Interrupted because Paper Pilot restarted before the response completed.", updatedAt, String(row.id));
+      this.db
+        .prepare(
+          "UPDATE tool_runs SET status = 'failed', error = ?, updated_at = ? WHERE run_id = ? AND status = 'running'"
+        )
+        .run("Interrupted by app restart.", updatedAt, String(row.id));
+      if (row.assistant_message_id) {
+        this.db
+          .prepare(
+            "UPDATE messages SET status = 'failed', content = CASE WHEN content = '' THEN ? ELSE content END WHERE id = ?"
+          )
+          .run("This response was interrupted when Paper Pilot restarted.", String(row.assistant_message_id));
+      }
+    }
+    return rows.length;
+  }
+
+  createToolRun(projectId: string, runId: string, toolName: string, input: Record<string, unknown>): string {
+    const toolRunId = id("tool");
+    const timestamp = nowIso();
+    this.db
+      .prepare(
+        `INSERT INTO tool_runs (
+          id, project_id, run_id, tool_name, status, input_json, output_json, error, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, 'running', ?, NULL, NULL, ?, ?)`
+      )
+      .run(toolRunId, projectId, runId, toolName, JSON.stringify(input), timestamp, timestamp);
+    return toolRunId;
+  }
+
+  finishToolRun(
+    toolRunId: string,
+    status: "completed" | "waiting" | "failed",
+    output?: Record<string, unknown>,
+    error?: string
+  ): void {
+    this.db
+      .prepare("UPDATE tool_runs SET status = ?, output_json = ?, error = ?, updated_at = ? WHERE id = ?")
+      .run(status, output ? JSON.stringify(output) : null, error ?? null, nowIso(), toolRunId);
+  }
+
+  replaceCitations(runId: string, citations: Citation[]): Citation[] {
+    this.db.prepare("DELETE FROM chat_citations WHERE run_id = ?").run(runId);
+    const insert = this.db.prepare(
+      `INSERT INTO chat_citations (
+        id, run_id, message_id, evidence_id, source_type, paper_id, artifact_id, chunk_id,
+        title, excerpt, page, locator, doi, url, retrieval_score
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    );
+    for (const citation of citations.map((value) => citationSchema.parse(value))) {
+      insert.run(
+        citation.id,
+        citation.runId,
+        citation.messageId ?? null,
+        citation.evidenceId,
+        citation.sourceType,
+        citation.paperId ?? null,
+        citation.artifactId ?? null,
+        citation.chunkId ?? null,
+        citation.title,
+        citation.excerpt,
+        citation.page ?? null,
+        citation.locator ?? null,
+        citation.doi ?? null,
+        citation.url ?? null,
+        citation.retrievalScore ?? null
+      );
+    }
+    return citations;
+  }
+
+  listCitations(runId: string): Citation[] {
+    return (
+      this.db.prepare("SELECT * FROM chat_citations WHERE run_id = ? ORDER BY evidence_id").all(runId) as Row[]
+    ).map((row) => this.citationFromRow(row));
   }
 
   savePaper(projectId: string, paperInput: Paper): Paper {
@@ -1005,6 +1366,34 @@ export class PaperPilotDb {
     }
   }
 
+  listArtifactChunks(projectId: string, artifactId: string, limit = 2): ChunkSearchRow[] {
+    return this.db
+      .prepare(
+        `SELECT
+           document_chunks.id as chunkId,
+           document_chunks.project_id as projectId,
+           projects.title as projectTitle,
+           document_chunks.artifact_id as artifactId,
+           artifacts.title as artifactTitle,
+           artifacts.type as artifactType,
+           artifacts.created_at as artifactCreatedAt,
+           document_chunks.paper_id as paperId,
+           papers.title as paperTitle,
+           document_chunks.text as text,
+           document_chunks.metadata_json as metadataJson,
+           substr(document_chunks.text, 1, 320) as snippet,
+           document_chunks.ordinal as score
+         FROM document_chunks
+         JOIN artifacts ON artifacts.id = document_chunks.artifact_id
+         JOIN projects ON projects.id = document_chunks.project_id
+         LEFT JOIN papers ON papers.id = document_chunks.paper_id
+         WHERE document_chunks.project_id = ? AND document_chunks.artifact_id = ?
+         ORDER BY document_chunks.ordinal ASC
+         LIMIT ?`
+      )
+      .all(projectId, artifactId, limit) as unknown as ChunkSearchRow[];
+  }
+
   searchChunks(
     projectId: string,
     query: string,
@@ -1170,14 +1559,71 @@ export class PaperPilotDb {
     });
   }
 
+  private conversationFromRow(row: Row): Conversation {
+    return conversationSchema.parse({
+      id: row.id,
+      projectId: row.project_id,
+      title: row.title,
+      mode: row.mode,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    });
+  }
+
   private messageFromRow(row: Row): Message {
     return messageSchema.parse({
       id: row.id,
       projectId: row.project_id,
+      conversationId: row.conversation_id ?? undefined,
+      runId: row.run_id ?? undefined,
       role: row.role,
       content: row.content,
+      status: row.status ?? "completed",
       metadata: JSON.parse(String(row.metadata_json)),
       createdAt: row.created_at
+    });
+  }
+
+  private chatRunFromRow(row: Row): ChatRun {
+    return chatRunSchema.parse({
+      id: row.id,
+      projectId: row.project_id,
+      conversationId: row.conversation_id,
+      userMessageId: row.user_message_id,
+      assistantMessageId: row.assistant_message_id ?? undefined,
+      outputArtifactId: row.output_artifact_id ?? undefined,
+      provider: row.provider,
+      model: row.model,
+      mode: row.mode,
+      status: row.status,
+      sourceRefs: JSON.parse(String(row.source_refs_json)),
+      includedMessageCount: Number(row.included_message_count ?? 0),
+      omittedMessageCount: Number(row.omitted_message_count ?? 0),
+      trace: JSON.parse(String(row.trace_json)),
+      error: row.error ?? undefined,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    });
+  }
+
+  private citationFromRow(row: Row): Citation {
+    return citationSchema.parse({
+      id: row.id,
+      runId: row.run_id,
+      messageId: row.message_id ?? undefined,
+      evidenceId: row.evidence_id,
+      sourceType: row.source_type,
+      paperId: row.paper_id ?? undefined,
+      artifactId: row.artifact_id ?? undefined,
+      chunkId: row.chunk_id ?? undefined,
+      title: row.title,
+      excerpt: row.excerpt,
+      page: row.page === null || row.page === undefined ? undefined : Number(row.page),
+      locator: row.locator ?? undefined,
+      doi: row.doi ?? undefined,
+      url: row.url ?? undefined,
+      retrievalScore:
+        row.retrieval_score === null || row.retrieval_score === undefined ? undefined : Number(row.retrieval_score)
     });
   }
 

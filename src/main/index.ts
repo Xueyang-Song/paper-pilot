@@ -5,7 +5,6 @@ import { join, dirname } from "node:path";
 import { PaperPilotDb } from "./db.js";
 import { registerIpc } from "./ipc.js";
 import { SourceRegistry } from "./sources/registry.js";
-import { AgentService } from "./services/agent-service.js";
 import { AiService } from "./services/ai-service.js";
 import { ArtifactService } from "./services/artifact-service.js";
 import { BrowserCrawlerService } from "./services/browser-crawler-service.js";
@@ -13,10 +12,10 @@ import { CredentialService } from "./services/credential-service.js";
 import { CrawlService } from "./services/crawl-service.js";
 import { FullTextService } from "./services/full-text-service.js";
 import { JobQueue } from "./services/job-queue.js";
-import { LocalAgentService } from "./services/local-agent-service.js";
 import { PaperScoringService } from "./services/paper-scoring-service.js";
 import { PythonService } from "./services/python-service.js";
 import { SearchService } from "./services/search-service.js";
+import { ResearchChatService } from "./services/research-chat-service.js";
 import { SettingsService } from "./services/settings-service.js";
 import { createUpdateService } from "./services/update-service.js";
 
@@ -119,8 +118,7 @@ app.whenReady().then(() => {
     settings
   );
   const ai = new AiService(db, settings, credentials, artifacts, jobs);
-  const localAgent = new LocalAgentService(db, registry, crawl, ai, jobs, { settings });
-  const agent = new AgentService(db, crawl, ai, artifacts, jobs, localAgent);
+  const researchChat = new ResearchChatService(db, artifacts, settings, credentials, registry, crawl, ai, jobs);
   const updates = createUpdateService({
     currentVersion: app.getVersion(),
     isPackaged: app.isPackaged,
@@ -130,7 +128,7 @@ app.whenReady().then(() => {
   registerIpc({
     db,
     registry,
-    agent,
+    researchChat,
     crawl,
     ai,
     artifacts,
