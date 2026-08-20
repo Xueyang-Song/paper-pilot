@@ -6,16 +6,44 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 
-export function MarkdownMessage({ content, isUser }: { content: string; isUser: boolean }): JSX.Element {
+export function MarkdownMessage({
+  content,
+  isUser,
+  onCitation
+}: {
+  content: string;
+  isUser: boolean;
+  onCitation?(evidenceId: string): void;
+}): JSX.Element {
+  const renderedContent = onCitation ? content.replace(/\[\[(S\d+)\]\]/g, "[$1](#citation-$1)") : content;
   return (
     <div className={`markdown-body ${isUser ? "markdown-body-user" : ""}`}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
-          a: ({ ...props }) => <a {...props} target="_blank" rel="noreferrer" />
+          a: ({ href, onClick, ...props }) => {
+            const evidenceId = href?.match(/^#citation-(S\d+)$/)?.[1];
+            return (
+              <a
+                {...props}
+                href={href}
+                target={evidenceId ? undefined : "_blank"}
+                rel={evidenceId ? undefined : "noreferrer"}
+                onClick={(event) => {
+                  onClick?.(event);
+                  if (!evidenceId) return;
+                  event.preventDefault();
+                  onCitation?.(evidenceId);
+                }}
+                className={
+                  evidenceId ? "rounded bg-primary/10 px-1 py-0.5 font-semibold text-primary no-underline" : undefined
+                }
+              />
+            );
+          }
         }}
       >
-        {content}
+        {renderedContent}
       </ReactMarkdown>
     </div>
   );

@@ -16,6 +16,7 @@ const mimeByType: Record<ArtifactType, string> = {
   markdown: "text/markdown",
   "crawl-log": "text/plain",
   brief: "text/markdown",
+  "chat-answer": "text/markdown",
   script: "text/x-python",
   table: "text/csv"
 };
@@ -158,6 +159,10 @@ export class ArtifactService {
     artifact: Artifact,
     options: { replace?: boolean } = {}
   ): Promise<{ chunkCount: number; warning?: string }> {
+    if (artifact.type === "chat-answer" || artifact.source === "research-chat") {
+      this.db.clearDocumentChunksForArtifact(artifact.id);
+      return { chunkCount: 0, warning: `${artifact.title}: generated answers are intentionally not indexed.` };
+    }
     const content = await readFile(artifact.path);
     return this.indexArtifactContent(artifact, content, options);
   }

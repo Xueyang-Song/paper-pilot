@@ -471,7 +471,7 @@ export function SettingsPanel({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="ai-gateway">Vercel AI Gateway</SelectItem>
+                  <SelectItem value="ai-gateway">AI provider (Vercel / OpenAI-compatible)</SelectItem>
                   {sources.map((source) => (
                     <SelectItem key={source.id} value={source.id}>
                       {source.displayName}

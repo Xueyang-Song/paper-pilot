@@ -22,7 +22,7 @@
 
 Paper Pilot is a **local-first desktop research assistant** built for scientists who are tired of switching between 10 browser tabs to find, read, and synthesize academic papers.
 
-Everything runs on your machine — your papers, your notes, your AI conversations. No cloud lock-in, no subscription fees, no data leaving your computer.
+Projects, papers, notes, conversations, citations, and indexes stay on your machine. Ollama keeps generation local; when you select a hosted provider, only the context needed for that request is sent to the configured endpoint.
 
 ```
 You ──▶  Ask a research question
@@ -65,8 +65,10 @@ Simultaneously queries **8+ academic databases**:
 - **Local Ollama** for fully offline operation
 - **OpenAI-compatible** API support
 - Vercel AI Gateway support with non-generating provider health checks
-- Tool-calling agent with citation grounding
-- Chat workspace with full conversation history
+- Named, streaming research chats across local and hosted providers
+- Grounded and Exploratory modes with request-scoped source pins
+- Inspectable citations, safe run traces, Stop/Retry, and context-window visibility
+- Automatically saved, non-indexed answer artifacts
 
 </td>
 </tr>
@@ -183,6 +185,7 @@ This is an **early v1** — buildable, test-covered, but still hardening for pro
 | Core crawlers (OpenAlex, Crossref, arXiv, PubMed) | ✅ Stable       |
 | SQLite + FTS5 + vector search                     | ✅ Stable       |
 | AI agent (Ollama / OpenAI-compatible)             | ✅ Stable       |
+| Evidence-grounded multi-chat research workspace   | ✅ Stable       |
 | Google Scholar crawler                            | ⚠️ Experimental |
 | macOS / Linux packaging                           | ⚠️ Untested     |
 | Cloud sync / collaboration                        | ❌ Not planned  |

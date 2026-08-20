@@ -70,6 +70,7 @@ export const artifactTypeSchema = z.enum([
   "markdown",
   "crawl-log",
   "brief",
+  "chat-answer",
   "script",
   "table"
 ]);
@@ -191,11 +192,88 @@ export type Project = z.infer<typeof projectSchema>;
 export const messageRoleSchema = z.enum(["user", "assistant", "system", "tool"]);
 export type MessageRole = z.infer<typeof messageRoleSchema>;
 
+export const chatModeSchema = z.enum(["grounded", "exploratory"]);
+export type ChatMode = z.infer<typeof chatModeSchema>;
+
+export const conversationSchema = z.object({
+  id: z.string(),
+  projectId: z.string(),
+  title: z.string().min(1).max(120),
+  mode: chatModeSchema.default("grounded"),
+  createdAt: z.string(),
+  updatedAt: z.string()
+});
+export type Conversation = z.infer<typeof conversationSchema>;
+
+export const sourceRefSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("paper"), id: z.string() }),
+  z.object({ type: z.literal("artifact"), id: z.string() })
+]);
+export type SourceRef = z.infer<typeof sourceRefSchema>;
+
+export const chatRunStatusSchema = z.enum(["queued", "running", "completed", "stopped", "failed"]);
+export type ChatRunStatus = z.infer<typeof chatRunStatusSchema>;
+
+export const chatTraceStepSchema = z.object({
+  id: z.string(),
+  kind: z.enum(["context", "retrieval", "provider", "tool", "citation", "artifact"]),
+  status: z.enum(["running", "waiting", "completed", "failed", "stopped"]),
+  label: z.string(),
+  detail: z.string().optional(),
+  toolName: z.string().optional(),
+  startedAt: z.string(),
+  completedAt: z.string().optional()
+});
+export type ChatTraceStep = z.infer<typeof chatTraceStepSchema>;
+
+export const citationSchema = z.object({
+  id: z.string(),
+  runId: z.string(),
+  messageId: z.string().optional(),
+  evidenceId: z.string(),
+  sourceType: z.enum(["paper", "artifact"]),
+  paperId: z.string().optional(),
+  artifactId: z.string().optional(),
+  chunkId: z.string().optional(),
+  title: z.string(),
+  excerpt: z.string(),
+  page: z.number().int().positive().optional(),
+  locator: z.string().optional(),
+  doi: z.string().optional(),
+  url: z.string().url().optional(),
+  retrievalScore: z.number().optional()
+});
+export type Citation = z.infer<typeof citationSchema>;
+
+export const chatRunSchema = z.object({
+  id: z.string(),
+  projectId: z.string(),
+  conversationId: z.string(),
+  userMessageId: z.string(),
+  assistantMessageId: z.string().optional(),
+  outputArtifactId: z.string().optional(),
+  provider: z.enum(["ollama", "vercel", "openai-compatible"]),
+  model: z.string(),
+  mode: chatModeSchema,
+  status: chatRunStatusSchema,
+  sourceRefs: z.array(sourceRefSchema).default([]),
+  includedMessageCount: z.number().int().nonnegative().default(0),
+  omittedMessageCount: z.number().int().nonnegative().default(0),
+  trace: z.array(chatTraceStepSchema).default([]),
+  error: z.string().optional(),
+  createdAt: z.string(),
+  updatedAt: z.string()
+});
+export type ChatRun = z.infer<typeof chatRunSchema>;
+
 export const messageSchema = z.object({
   id: z.string(),
   projectId: z.string(),
+  conversationId: z.string().optional(),
+  runId: z.string().optional(),
   role: messageRoleSchema,
   content: z.string(),
+  status: z.enum(["streaming", "completed", "stopped", "failed"]).default("completed"),
   metadata: z.record(z.string(), z.unknown()).default({}),
   createdAt: z.string()
 });
@@ -327,20 +405,69 @@ export const aiProviderHealthSchema = z.object({
 });
 export type AiProviderHealth = z.infer<typeof aiProviderHealthSchema>;
 
-export const chatRequestSchema = z.object({
-  projectId: z.string().optional(),
-  content: z.string().min(1),
-  crawlConfig: crawlConfigSchema.partial().optional()
+export const startChatRunRequestSchema = z.object({
+  projectId: z.string(),
+  conversationId: z.string(),
+  content: z.string().trim().min(1),
+  mode: chatModeSchema.optional(),
+  sourceRefs: z.array(sourceRefSchema).max(50).default([])
 });
-export type ChatRequest = z.infer<typeof chatRequestSchema>;
+export type StartChatRunRequest = z.infer<typeof startChatRunRequestSchema>;
 
-export const chatResponseSchema = z.object({
-  project: projectSchema,
-  messages: z.array(messageSchema),
-  jobs: z.array(jobSchema).default([]),
-  artifacts: z.array(artifactSchema).default([])
+export const startChatRunResponseSchema = z.object({
+  runId: z.string(),
+  userMessageId: z.string(),
+  assistantMessageId: z.string()
 });
-export type ChatResponse = z.infer<typeof chatResponseSchema>;
+export type StartChatRunResponse = z.infer<typeof startChatRunResponseSchema>;
+
+export const chatRunEventSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("status"),
+    runId: z.string(),
+    projectId: z.string(),
+    conversationId: z.string(),
+    assistantMessageId: z.string(),
+    status: chatRunStatusSchema
+  }),
+  z.object({
+    type: z.literal("delta"),
+    runId: z.string(),
+    projectId: z.string(),
+    conversationId: z.string(),
+    assistantMessageId: z.string(),
+    text: z.string()
+  }),
+  z.object({
+    type: z.literal("trace"),
+    runId: z.string(),
+    projectId: z.string(),
+    conversationId: z.string(),
+    assistantMessageId: z.string(),
+    step: chatTraceStepSchema
+  }),
+  z.object({
+    type: z.literal("complete"),
+    runId: z.string(),
+    projectId: z.string(),
+    conversationId: z.string(),
+    assistantMessageId: z.string(),
+    run: chatRunSchema,
+    message: messageSchema,
+    artifact: artifactSchema.optional(),
+    citations: z.array(citationSchema)
+  }),
+  z.object({
+    type: z.literal("error"),
+    runId: z.string(),
+    projectId: z.string(),
+    conversationId: z.string(),
+    assistantMessageId: z.string(),
+    error: z.string(),
+    status: z.enum(["stopped", "failed"])
+  })
+]);
+export type ChatRunEvent = z.infer<typeof chatRunEventSchema>;
 
 export const credentialUpsertSchema = z.object({
   sourceId: sourceIdSchema.or(z.literal("ai-gateway")),

@@ -208,7 +208,12 @@ export function App(): JSX.Element {
             <ChatWorkspace
               bundle={activeBundle}
               activeProjectId={activeProjectId}
-              onProjectCreated={setActiveProjectId}
+              currentArtifactId={viewerArtifactId}
+              onOpenArtifact={(artifactId, page) => {
+                setViewerHighlightQuery("");
+                setViewerSearchPage(page);
+                setViewerArtifactId(artifactId);
+              }}
             />
             <ArtifactPanel
               projectId={activeProjectId}

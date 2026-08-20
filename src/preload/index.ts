@@ -4,8 +4,11 @@ import type {
   AiProviderCheckRequest,
   AiProviderHealth,
   Artifact,
-  ChatRequest,
-  ChatResponse,
+  ChatMode,
+  ChatRun,
+  ChatRunEvent,
+  Citation,
+  Conversation,
   CredentialUpsert,
   CrawlConfig,
   Job,
@@ -20,6 +23,8 @@ import type {
   SearchRequest,
   SearchResponse,
   SourceDefinition,
+  StartChatRunRequest,
+  StartChatRunResponse,
   UpdateStatus
 } from "../shared/schemas.js";
 
@@ -27,6 +32,7 @@ const { contextBridge, ipcRenderer } = electron;
 
 export interface ProjectBundle {
   project: Project;
+  conversations: Conversation[];
   messages: Message[];
   artifacts: Artifact[];
   papers: Paper[];
@@ -67,9 +73,21 @@ export interface PaperPilotApi {
   exportProject(input: { projectId: string }): Promise<{ ok: boolean; path?: string }>;
   importProject(): Promise<Project | undefined>;
   updateProjectPolicy(input: { projectId: string; patch: Partial<ProjectPolicy> }): Promise<ProjectPolicy>;
-  sendChat(input: ChatRequest): Promise<ChatResponse>;
-  clearChat(input: { projectId: string }): Promise<{ cleared: number }>;
-  exportChat(input: { projectId: string }): Promise<{ ok: boolean; path?: string; count?: number }>;
+  listConversations(projectId: string): Promise<Conversation[]>;
+  createConversation(input: { projectId: string; title?: string; mode?: ChatMode }): Promise<Conversation>;
+  updateConversation(input: { conversationId: string; title?: string; mode?: ChatMode }): Promise<Conversation>;
+  deleteConversation(conversationId: string): Promise<Conversation>;
+  listConversationMessages(input: { projectId: string; conversationId: string }): Promise<Message[]>;
+  listChatRuns(conversationId: string): Promise<ChatRun[]>;
+  listChatCitations(runId: string): Promise<Citation[]>;
+  startChatRun(input: StartChatRunRequest): Promise<StartChatRunResponse>;
+  cancelChatRun(runId: string): Promise<{ cancelled: boolean }>;
+  onChatRunEvent(listener: (event: ChatRunEvent) => void): () => void;
+  clearChat(input: { projectId: string; conversationId?: string }): Promise<{ cleared: number }>;
+  exportChat(input: {
+    projectId: string;
+    conversationId?: string;
+  }): Promise<{ ok: boolean; path?: string; count?: number }>;
   listSources(): Promise<SourceDefinition[]>;
   getSettings(): Promise<AppSettings>;
   updateSettings(input: Partial<AppSettings>): Promise<AppSettings>;
@@ -166,7 +184,20 @@ const api: PaperPilotApi = {
   exportProject: (input) => ipcRenderer.invoke("projects:export", input),
   importProject: () => ipcRenderer.invoke("projects:import"),
   updateProjectPolicy: (input) => ipcRenderer.invoke("projects:updatePolicy", input),
-  sendChat: (input) => ipcRenderer.invoke("chat:send", input),
+  listConversations: (projectId) => ipcRenderer.invoke("conversations:list", projectId),
+  createConversation: (input) => ipcRenderer.invoke("conversations:create", input),
+  updateConversation: (input) => ipcRenderer.invoke("conversations:update", input),
+  deleteConversation: (conversationId) => ipcRenderer.invoke("conversations:delete", conversationId),
+  listConversationMessages: (input) => ipcRenderer.invoke("conversations:messages", input),
+  listChatRuns: (conversationId) => ipcRenderer.invoke("conversations:runs", conversationId),
+  listChatCitations: (runId) => ipcRenderer.invoke("chat:citations", runId),
+  startChatRun: (input) => ipcRenderer.invoke("chat:start", input),
+  cancelChatRun: (runId) => ipcRenderer.invoke("chat:cancel", runId),
+  onChatRunEvent: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, runEvent: ChatRunEvent) => listener(runEvent);
+    ipcRenderer.on("chat:run-event", handler);
+    return () => ipcRenderer.off("chat:run-event", handler);
+  },
   clearChat: (input) => ipcRenderer.invoke("chat:clear", input),
   exportChat: (input) => ipcRenderer.invoke("chat:export", input),
   listSources: () => ipcRenderer.invoke("sources:list"),

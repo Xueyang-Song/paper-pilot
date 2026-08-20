@@ -74,6 +74,30 @@ describe("AiService", () => {
     expect(fetchMock).toHaveBeenCalledOnce();
   });
 
+  it("uses a no-auth OpenAI-compatible endpoint for briefs", async () => {
+    const project = seedProject();
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      expect(init?.headers).not.toHaveProperty("Authorization");
+      return new Response(JSON.stringify({ choices: [{ message: { content: "Local compatible brief" } }] }), {
+        status: 200
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const service = serviceWithSettings({
+      ai: {
+        provider: "openai-compatible",
+        baseUrl: "http://models.test/v1",
+        model: "local-model",
+        hasApiKey: false,
+        reasoningEnabled: false
+      },
+      python: { runtimeMode: "managed", markitdownEnabled: true }
+    });
+
+    const brief = await service.generateResearchBrief(project.id, "Summarize the papers.");
+    expect(brief.content).toBe("Local compatible brief");
+  });
+
   it("falls back to local structured synthesis and records provider metadata on model failure", async () => {
     const project = seedProject();
     vi.stubGlobal(
@@ -211,6 +235,26 @@ describe("AiService", () => {
     }).checkProvider();
 
     expect(health).toMatchObject({ provider: "vercel", reachable: false, status: "warning", hasApiKey: false });
+  });
+
+  it("checks a no-auth OpenAI-compatible endpoint", async () => {
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      expect(init?.headers).toEqual({});
+      return new Response(JSON.stringify({ data: [{ id: "local-model" }] }), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const health = await serviceWithSettings({
+      ai: {
+        provider: "openai-compatible",
+        baseUrl: "http://models.test/v1",
+        model: "local-model",
+        hasApiKey: false,
+        reasoningEnabled: false
+      },
+      python: { runtimeMode: "managed", markitdownEnabled: true }
+    }).checkProvider();
+
+    expect(health).toMatchObject({ reachable: true, status: "ok", hasApiKey: false });
   });
 });
 
