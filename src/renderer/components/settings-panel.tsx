@@ -78,6 +78,7 @@ export function SettingsPanel({
   const [provider, setProvider] = useState<AppSettings["ai"]["provider"]>("ollama");
   const [model, setModel] = useState(providerDefaults.ollama.model);
   const [baseUrl, setBaseUrl] = useState(providerDefaults.ollama.baseUrl);
+  const [modelDiscoveryUrl, setModelDiscoveryUrl] = useState(providerDefaults.ollama.baseUrl);
 
   useEffect(() => {
     if (settingsQuery.data) {
@@ -92,6 +93,33 @@ export function SettingsPanel({
       queryClient.setQueryData<UpdateStatus>(["updates"], status);
     });
   }, [queryClient]);
+
+  useEffect(() => {
+    if (!open || provider !== "ollama") return;
+    const timer = window.setTimeout(() => setModelDiscoveryUrl(baseUrl.trim()), 400);
+    return () => window.clearTimeout(timer);
+  }, [baseUrl, open, provider]);
+
+  const ollamaDiscoveryUrl = provider === "ollama" && isHttpUrl(modelDiscoveryUrl) ? modelDiscoveryUrl : "";
+  const ollamaModelsQuery = useQuery({
+    queryKey: ["ai-models", "ollama", ollamaDiscoveryUrl],
+    queryFn: () => window.paperPilot.listAiModels({ provider: "ollama", baseUrl: ollamaDiscoveryUrl }),
+    enabled: open && Boolean(ollamaDiscoveryUrl),
+    retry: false,
+    staleTime: 10_000,
+    refetchOnWindowFocus: false
+  });
+
+  useEffect(() => {
+    if (
+      provider !== "ollama" ||
+      ollamaModelsQuery.data?.baseUrl !== baseUrl.trim() ||
+      !ollamaModelsQuery.data.models.length
+    )
+      return;
+    const installed = ollamaModelsQuery.data.models;
+    if (!installed.some((candidate) => candidate.id === model)) setModel(installed[0].id);
+  }, [baseUrl, model, ollamaModelsQuery.data, provider]);
 
   const saveCredential = useMutation({
     mutationFn: () => window.paperPilot.saveCredential({ sourceId: selectedSource, label: "default", secret }),
@@ -179,6 +207,13 @@ export function SettingsPanel({
     candidateHealth?.provider === provider && candidateHealth.baseUrl === baseUrl && candidateHealth.model === model
       ? candidateHealth
       : undefined;
+  const ollamaDiscoveryIsCurrent = ollamaModelsQuery.data?.baseUrl === baseUrl.trim();
+  const ollamaDiscoveryRequestIsCurrent = modelDiscoveryUrl === baseUrl.trim();
+  const installedOllamaModels = ollamaDiscoveryIsCurrent ? (ollamaModelsQuery.data?.models ?? []) : [];
+  const selectedOllamaModel = installedOllamaModels.find((candidate) => candidate.id === model);
+  const canSaveAiSettings = provider !== "ollama" || Boolean(selectedOllamaModel);
+  const ollamaModelsLoading =
+    provider === "ollama" && isHttpUrl(baseUrl) && (!ollamaDiscoveryIsCurrent || ollamaModelsQuery.isPending);
   const disabledSourceIds = new Set(settingsQuery.data?.sources.disabledSourceIds ?? []);
   const updateStatus = updateQuery.data;
   const updateBusy =
@@ -360,24 +395,100 @@ export function SettingsPanel({
               </Select>
               <FieldLabel>Base URL</FieldLabel>
               <Input value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} />
-              <FieldLabel>Model</FieldLabel>
-              <Input value={model} onChange={(event) => setModel(event.target.value)} />
-              {displayedHealth?.models.length ? (
-                <Select value={model} onValueChange={setModel}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {displayedHealth.models.map((modelName) => (
-                      <SelectItem key={modelName} value={modelName}>
-                        {modelName}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ) : null}
+              <FieldLabel>{provider === "ollama" ? "Installed model" : "Model"}</FieldLabel>
+              {provider === "ollama" ? (
+                <>
+                  <div className="flex gap-2">
+                    <Select
+                      value={selectedOllamaModel?.id ?? ""}
+                      onValueChange={setModel}
+                      disabled={ollamaModelsLoading || installedOllamaModels.length === 0}
+                    >
+                      <SelectTrigger className="min-w-0 flex-1" aria-label="Installed Ollama model">
+                        <SelectValue
+                          placeholder={ollamaModelsLoading ? "Loading installed models..." : "Select a model"}
+                        />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {installedOllamaModels.map((candidate) => (
+                          <SelectItem key={candidate.id} value={candidate.id}>
+                            {candidate.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="outline"
+                      aria-label="Refresh installed Ollama models"
+                      title="Refresh installed Ollama models"
+                      onClick={() => void ollamaModelsQuery.refetch()}
+                      disabled={!ollamaDiscoveryUrl || !ollamaDiscoveryRequestIsCurrent || ollamaModelsQuery.isFetching}
+                    >
+                      <RefreshCw size={14} className={cn(ollamaModelsQuery.isFetching && "animate-spin")} />
+                    </Button>
+                  </div>
+                  {!isHttpUrl(baseUrl) ? (
+                    <p className="text-xs text-destructive">Enter a valid Ollama base URL to discover models.</p>
+                  ) : null}
+                  {ollamaDiscoveryRequestIsCurrent && ollamaModelsQuery.isError ? (
+                    <Alert variant="destructive">
+                      <AlertTitle>Could not load Ollama models</AlertTitle>
+                      <AlertDescription>
+                        {errorMessage(ollamaModelsQuery.error)} Make sure Ollama is running and the base URL is correct.
+                      </AlertDescription>
+                    </Alert>
+                  ) : null}
+                  {ollamaDiscoveryIsCurrent && ollamaModelsQuery.isSuccess && installedOllamaModels.length === 0 ? (
+                    <Alert className="border-chart-4/45 bg-chart-4/10">
+                      <AlertTitle>No installed models found</AlertTitle>
+                      <AlertDescription>
+                        Install a model with Ollama, then refresh this list. Paper Pilot cannot run a model that is not
+                        installed.
+                      </AlertDescription>
+                    </Alert>
+                  ) : null}
+                  {selectedOllamaModel ? (
+                    <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                      <span>Exact model: {selectedOllamaModel.id}</span>
+                      {selectedOllamaModel.parameterSize ? (
+                        <Badge variant="secondary">{selectedOllamaModel.parameterSize}</Badge>
+                      ) : null}
+                      {selectedOllamaModel.quantizationLevel ? (
+                        <Badge variant="outline">{selectedOllamaModel.quantizationLevel}</Badge>
+                      ) : null}
+                      {selectedOllamaModel.sizeBytes !== undefined ? (
+                        <Badge variant="outline">{formatBytes(selectedOllamaModel.sizeBytes)}</Badge>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </>
+              ) : (
+                <>
+                  <Input value={model} onChange={(event) => setModel(event.target.value)} />
+                  {displayedHealth?.models.length ? (
+                    <Select value={model} onValueChange={setModel}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {displayedHealth.models.map((modelName) => (
+                          <SelectItem key={modelName} value={modelName}>
+                            {modelName}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : null}
+                </>
+              )}
               <div className="grid grid-cols-2 gap-2">
-                <Button type="button" onClick={() => saveSettings.mutate()} disabled={saveSettings.isPending}>
+                <Button
+                  type="button"
+                  onClick={() => saveSettings.mutate()}
+                  disabled={saveSettings.isPending || !canSaveAiSettings}
+                >
                   {saveSettings.isPending ? <Loader2 size={14} className="animate-spin" /> : null}
                   Save AI settings
                 </Button>
@@ -385,7 +496,7 @@ export function SettingsPanel({
                   type="button"
                   variant="outline"
                   onClick={() => checkProvider.mutate()}
-                  disabled={checkProvider.isPending}
+                  disabled={checkProvider.isPending || !canSaveAiSettings}
                 >
                   {checkProvider.isPending ? (
                     <Loader2 size={14} className="animate-spin" />
@@ -601,6 +712,19 @@ export function SettingsPanel({
 
 function FieldLabel({ children }: { children: string }): JSX.Element {
   return <label className="block text-xs font-medium text-muted-foreground">{children}</label>;
+}
+
+function isHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value.trim());
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function updateStatusText(status: UpdateStatus | undefined): string {

@@ -1,5 +1,10 @@
+import { z } from "zod";
 import {
+  aiModelListSchema,
   aiProviderHealthSchema,
+  type AiModelInfo,
+  type AiModelList,
+  type AiModelListRequest,
   type AiProviderCheckRequest,
   type AiProviderHealth,
   type AppSettings,
@@ -10,6 +15,30 @@ import type { ArtifactService } from "./artifact-service.js";
 import type { CredentialService } from "./credential-service.js";
 import type { JobQueue } from "./job-queue.js";
 import type { SettingsService } from "./settings-service.js";
+
+const ollamaTagsResponseSchema = z.object({
+  models: z
+    .array(
+      z.object({
+        name: z.string().optional(),
+        model: z.string().optional(),
+        modified_at: z.string().optional(),
+        size: z.number().nonnegative().optional(),
+        details: z
+          .object({
+            family: z.string().optional(),
+            parameter_size: z.string().optional(),
+            quantization_level: z.string().optional()
+          })
+          .optional()
+      })
+    )
+    .default([])
+});
+
+const openAiModelsResponseSchema = z.object({
+  data: z.array(z.object({ id: z.string().trim().min(1) })).default([])
+});
 
 export class AiService {
   constructor(
@@ -157,6 +186,19 @@ export class AiService {
     return data.message?.content ?? "No response content returned by the local Ollama model.";
   }
 
+  async listModels(input: AiModelListRequest): Promise<AiModelList> {
+    const models =
+      input.provider === "ollama"
+        ? await this.listOllamaModels(input.baseUrl)
+        : await this.listOpenAiCompatibleModels(input.provider, input.baseUrl);
+    return aiModelListSchema.parse({
+      provider: input.provider,
+      baseUrl: input.baseUrl,
+      fetchedAt: new Date().toISOString(),
+      models
+    });
+  }
+
   async checkProvider(input: AiProviderCheckRequest = {}): Promise<AiProviderHealth> {
     const current = await this.settings.get();
     const ai = { ...current.ai, ...(input ?? {}) };
@@ -164,12 +206,8 @@ export class AiService {
     const hasApiKey = this.credentials.has("ai-gateway");
     try {
       if (ai.provider === "ollama") {
-        const response = await fetch(`${trimTrailingSlash(ai.baseUrl)}/api/tags`, {
-          signal: AbortSignal.timeout(2500)
-        });
-        if (!response.ok) throw new Error(`Ollama returned ${response.status}.`);
-        const data = (await response.json()) as { models?: Array<{ name?: string }> };
-        const models = (data.models ?? []).map((model) => model.name).filter((name): name is string => Boolean(name));
+        const modelList = await this.listModels({ provider: ai.provider, baseUrl: ai.baseUrl });
+        const models = modelList.models.map((model) => model.id);
         const status = models.length && models.includes(ai.model) ? "ok" : "warning";
         const detail = !models.length
           ? "Ollama is reachable, but no models are installed."
@@ -202,16 +240,8 @@ export class AiService {
         });
       }
 
-      const response = await fetch(openAiCompatibleUrl(ai.baseUrl, "models"), {
-        headers: hasApiKey ? { Authorization: `Bearer ${this.credentials.get("ai-gateway")}` } : {},
-        signal: AbortSignal.timeout(5000)
-      });
-      if (!response.ok) {
-        const detail = await response.text().catch(() => "");
-        throw new Error(`Model list failed ${response.status}: ${detail.slice(0, 300)}`);
-      }
-      const data = (await response.json()) as { data?: Array<{ id?: string }> };
-      const models = (data.data ?? []).map((model) => model.id).filter((name): name is string => Boolean(name));
+      const modelList = await this.listModels({ provider: ai.provider, baseUrl: ai.baseUrl });
+      const models = modelList.models.map((model) => model.id);
       return aiProviderHealthSchema.parse({
         provider: ai.provider,
         baseUrl: ai.baseUrl,
@@ -236,6 +266,62 @@ export class AiService {
       });
     }
   }
+
+  private async listOllamaModels(baseUrl: string): Promise<AiModelInfo[]> {
+    const response = await fetch(`${trimTrailingSlash(baseUrl)}/api/tags`, {
+      signal: AbortSignal.timeout(5000)
+    });
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "");
+      throw new Error(
+        `Ollama model discovery failed (${response.status})${detail ? `: ${detail.slice(0, 300)}` : "."}`
+      );
+    }
+    const parsed = ollamaTagsResponseSchema.parse(await response.json());
+    return uniqueModels(
+      parsed.models.flatMap((entry) => {
+        const id = entry.model?.trim() || entry.name?.trim();
+        if (!id) return [];
+        return [
+          {
+            id,
+            name: entry.name?.trim() || id,
+            modifiedAt: entry.modified_at,
+            sizeBytes: entry.size,
+            family: entry.details?.family,
+            parameterSize: entry.details?.parameter_size,
+            quantizationLevel: entry.details?.quantization_level
+          }
+        ];
+      })
+    );
+  }
+
+  private async listOpenAiCompatibleModels(
+    provider: Exclude<AppSettings["ai"]["provider"], "ollama">,
+    baseUrl: string
+  ): Promise<AiModelInfo[]> {
+    const apiKey = this.credentials.get("ai-gateway");
+    if (provider === "vercel" && !apiKey) throw new Error("AI Gateway API key is not configured.");
+    const response = await fetch(openAiCompatibleUrl(baseUrl, "models"), {
+      headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
+      signal: AbortSignal.timeout(5000)
+    });
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "");
+      throw new Error(`Model discovery failed (${response.status})${detail ? `: ${detail.slice(0, 300)}` : "."}`);
+    }
+    const parsed = openAiModelsResponseSchema.parse(await response.json());
+    return uniqueModels(parsed.data.map(({ id }) => ({ id, name: id })));
+  }
+}
+
+function uniqueModels(models: AiModelInfo[]): AiModelInfo[] {
+  const byId = new Map(models.map((model) => [model.id, model]));
+  return [...byId.values()].sort(
+    (left, right) =>
+      (right.modifiedAt ?? "").localeCompare(left.modifiedAt ?? "") || left.name.localeCompare(right.name)
+  );
 }
 
 function providerLabel(provider: AppSettings["ai"]["provider"]): string {
