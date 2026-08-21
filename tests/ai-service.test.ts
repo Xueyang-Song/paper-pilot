@@ -173,6 +173,75 @@ describe("AiService", () => {
     expect(health.detail).toContain("no models");
   });
 
+  it("discovers exact installed Ollama model identifiers and metadata", async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      expect(url).toBe("http://ollama.test/api/tags");
+      return new Response(
+        JSON.stringify({
+          models: [
+            {
+              name: "qwen3.8:latest",
+              model: "qwen3.8:latest",
+              modified_at: "2026-08-19T23:46:32.000Z",
+              size: 17_741_872_154,
+              details: {
+                family: "qwen3",
+                parameter_size: "27.3B",
+                quantization_level: "Q4_K_M"
+              }
+            },
+            {
+              name: "gemma3:4b",
+              model: "gemma3:4b",
+              modified_at: "2026-08-18T00:00:00.000Z"
+            }
+          ]
+        }),
+        { status: 200 }
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await serviceWithSettings({
+      ai: {
+        provider: "ollama",
+        baseUrl: "http://ollama.test",
+        model: "qwen3.8:latest",
+        hasApiKey: false,
+        reasoningEnabled: true
+      },
+      python: { runtimeMode: "managed", markitdownEnabled: true }
+    }).listModels({ provider: "ollama", baseUrl: "http://ollama.test" });
+
+    expect(result.models.map((model) => model.id)).toEqual(["qwen3.8:latest", "gemma3:4b"]);
+    expect(result.models[0]).toMatchObject({
+      name: "qwen3.8:latest",
+      parameterSize: "27.3B",
+      quantizationLevel: "Q4_K_M",
+      sizeBytes: 17_741_872_154
+    });
+  });
+
+  it("surfaces Ollama model-discovery response details", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("runner process exited", { status: 500 }))
+    );
+
+    await expect(
+      serviceWithSettings({
+        ai: {
+          provider: "ollama",
+          baseUrl: "http://ollama.test",
+          model: "qwen3.8:latest",
+          hasApiKey: false,
+          reasoningEnabled: true
+        },
+        python: { runtimeMode: "managed", markitdownEnabled: true }
+      }).listModels({ provider: "ollama", baseUrl: "http://ollama.test" })
+    ).rejects.toThrow("Ollama model discovery failed (500): runner process exited");
+  });
+
   it("checks gateway health with a non-generating model-list request", async () => {
     const fetchMock = vi.fn(async (url: string) => {
       expect(url).toBe("https://gateway.test/v1/models");

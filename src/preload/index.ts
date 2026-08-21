@@ -1,6 +1,8 @@
 import electron from "electron";
 import type {
   AppSettings,
+  AiModelList,
+  AiModelListRequest,
   AiProviderCheckRequest,
   AiProviderHealth,
   Artifact,
@@ -112,6 +114,7 @@ export interface PaperPilotApi {
     projectId: string;
     prompt: string;
   }): Promise<{ content: string; artifactId: string; jobId: string }>;
+  listAiModels(input: AiModelListRequest): Promise<AiModelList>;
   checkAiProvider(input?: AiProviderCheckRequest): Promise<AiProviderHealth>;
   scorePapers(input: { projectId: string }): Promise<{ scoredCount: number; papers: Paper[] }>;
   updatePaper(input: PaperUpdate): Promise<Paper>;
@@ -219,6 +222,7 @@ const api: PaperPilotApi = {
   testCredential: (input) => ipcRenderer.invoke("credentials:test", input),
   runCrawl: (input) => ipcRenderer.invoke("crawl:run", input),
   generateBrief: (input) => ipcRenderer.invoke("brief:generate", input),
+  listAiModels: (input) => ipcRenderer.invoke("ai:listModels", input),
   checkAiProvider: (input) => ipcRenderer.invoke("ai:checkProvider", input),
   scorePapers: (input) => ipcRenderer.invoke("papers:score", input),
   updatePaper: (input) => ipcRenderer.invoke("papers:update", input),

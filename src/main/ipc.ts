@@ -7,6 +7,7 @@ import {
   artifactSchema,
   artifactUpdateSchema,
   appSettingsSchema,
+  aiModelListRequestSchema,
   aiProviderCheckRequestSchema,
   chatModeSchema,
   chatRunSchema,
@@ -351,6 +352,10 @@ export function registerIpc(services: IpcServices): void {
 
   ipcMain.handle("ai:checkProvider", (_event, input: unknown) =>
     services.ai.checkProvider(aiProviderCheckRequestSchema.parse(input))
+  );
+
+  ipcMain.handle("ai:listModels", (_event, input: unknown) =>
+    services.ai.listModels(aiModelListRequestSchema.parse(input))
   );
 
   ipcMain.handle("papers:score", (_event, input: unknown) => {

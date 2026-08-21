@@ -383,6 +383,31 @@ export type AppSettings = z.infer<typeof appSettingsSchema>;
 export const aiProviderSchema = appSettingsSchema.shape.ai.shape.provider;
 export type AiProvider = z.infer<typeof aiProviderSchema>;
 
+export const aiModelInfoSchema = z.object({
+  id: z.string().trim().min(1),
+  name: z.string().trim().min(1),
+  modifiedAt: z.string().optional(),
+  sizeBytes: z.number().nonnegative().optional(),
+  family: z.string().optional(),
+  parameterSize: z.string().optional(),
+  quantizationLevel: z.string().optional()
+});
+export type AiModelInfo = z.infer<typeof aiModelInfoSchema>;
+
+export const aiModelListRequestSchema = z.object({
+  provider: aiProviderSchema,
+  baseUrl: z.string().url()
+});
+export type AiModelListRequest = z.infer<typeof aiModelListRequestSchema>;
+
+export const aiModelListSchema = z.object({
+  provider: aiProviderSchema,
+  baseUrl: z.string().url(),
+  fetchedAt: z.string(),
+  models: z.array(aiModelInfoSchema)
+});
+export type AiModelList = z.infer<typeof aiModelListSchema>;
+
 export const aiProviderCheckRequestSchema = z
   .object({
     provider: aiProviderSchema.optional(),
