@@ -63,6 +63,64 @@ describe("ResearchChatService", () => {
     expect(db.searchChunks(projectId, "controlled improvement")).toHaveLength(0);
   });
 
+  it("completes grounded answers cited to artifacts without linked papers", async () => {
+    const project = db.createProject("Imported evidence project");
+    const conversation = db.ensureDefaultConversation(project.id);
+    const artifact = db.saveArtifact({
+      id: "artifact_without_paper",
+      projectId: project.id,
+      type: "markdown",
+      title: "Imported experiment notes",
+      path: join(dir, "experiment-notes.md"),
+      mime: "text/markdown",
+      hash: "artifact-hash",
+      source: "import",
+      metadata: {},
+      createdAt: new Date().toISOString()
+    });
+    db.addDocumentChunks({
+      projectId: project.id,
+      artifactId: artifact.id,
+      chunks: [{ text: "The imported experiment reports a reproducible measured improvement." }]
+    });
+    expect(db.listArtifactChunks(project.id, artifact.id)[0].paperId).toBeUndefined();
+    expect(
+      db.searchIndexedChunks({ projectId: project.id, query: "reproducible measured improvement" })[0].paperId
+    ).toBeUndefined();
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(
+          new Response(
+            `${JSON.stringify({ message: { content: "The experiment reports a reproducible improvement. [[S1]]" } })}\n`,
+            { status: 200, headers: { "content-type": "application/x-ndjson" } }
+          )
+        )
+    );
+    const service = createService();
+    const events: ChatRunEvent[] = [];
+    const terminalPromise = terminalEvent(events);
+
+    const started = await service.start(
+      {
+        projectId: project.id,
+        conversationId: conversation.id,
+        content: "What reproducible improvement does the imported experiment report?",
+        mode: "grounded",
+        sourceRefs: []
+      },
+      (event) => events.push(event)
+    );
+    const terminal = await terminalPromise;
+
+    expect(terminal.type).toBe("complete");
+    expect(db.getChatRun(started.runId)?.status).toBe("completed");
+    expect(db.listCitations(started.runId)).toMatchObject([
+      { evidenceId: "S1", sourceType: "artifact", artifactId: artifact.id, paperId: undefined }
+    ]);
+  });
+
   it("repairs an invalid grounded citation once", async () => {
     const { projectId, conversationId } = seedProject();
     const fetchMock = vi

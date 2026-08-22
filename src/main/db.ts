@@ -5,6 +5,7 @@ import { dirname } from "node:path";
 import {
   type Artifact,
   artifactSchema,
+  artifactTypeSchema,
   type ChatMode,
   type ChatRun,
   chatRunSchema,
@@ -1353,7 +1354,7 @@ export class PaperPilotDb {
     if (input.projectId) params.projectId = input.projectId;
     if (input.artifactId) params.artifactId = input.artifactId;
     try {
-      return this.db
+      const rows = this.db
         .prepare(
           `SELECT
              document_chunks_fts.chunk_id as chunkId,
@@ -1378,14 +1379,15 @@ export class PaperPilotDb {
            ORDER BY score
            LIMIT @limit`
         )
-        .all(params) as unknown as ChunkSearchRow[];
+        .all(params) as Row[];
+      return rows.map((row) => this.chunkSearchFromRow(row));
     } catch {
       return [];
     }
   }
 
   listArtifactChunks(projectId: string, artifactId: string, limit = 2): ChunkSearchRow[] {
-    return this.db
+    const rows = this.db
       .prepare(
         `SELECT
            document_chunks.id as chunkId,
@@ -1409,7 +1411,8 @@ export class PaperPilotDb {
          ORDER BY document_chunks.ordinal ASC
          LIMIT ?`
       )
-      .all(projectId, artifactId, limit) as unknown as ChunkSearchRow[];
+      .all(projectId, artifactId, limit) as Row[];
+    return rows.map((row) => this.chunkSearchFromRow(row));
   }
 
   searchChunks(
@@ -1645,6 +1648,24 @@ export class PaperPilotDb {
     });
   }
 
+  private chunkSearchFromRow(row: Row): ChunkSearchRow {
+    return {
+      chunkId: String(row.chunkId),
+      projectId: String(row.projectId),
+      projectTitle: String(row.projectTitle),
+      artifactId: String(row.artifactId),
+      artifactTitle: String(row.artifactTitle),
+      artifactType: artifactTypeSchema.parse(row.artifactType),
+      artifactCreatedAt: String(row.artifactCreatedAt),
+      paperId: optionalString(row.paperId),
+      paperTitle: optionalString(row.paperTitle),
+      text: String(row.text),
+      metadataJson: String(row.metadataJson),
+      snippet: String(row.snippet),
+      score: Number(row.score)
+    };
+  }
+
   private paperFromRow(row: Row): Paper {
     return paperSchema.parse({
       id: row.id,
@@ -1730,6 +1751,10 @@ function parseJsonArray(value: unknown): string[] {
 function normalizeOptional(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
   return trimmed ? trimmed : undefined;
+}
+
+function optionalString(value: unknown): string | undefined {
+  return typeof value === "string" ? normalizeOptional(value) : undefined;
 }
 
 function buildFtsQuery(query: string): string {
