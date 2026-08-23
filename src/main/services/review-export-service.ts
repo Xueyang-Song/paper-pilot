@@ -639,11 +639,11 @@ function risText(value: string): string {
 }
 
 function markdownInline(value: string): string {
-  return value.replace(/\r?\n/g, " ").replace(/`/g, "\\`");
+  return value.replace(/\\/g, "\\\\").replace(/\r?\n/g, " ").replace(/`/g, "\\`");
 }
 
 function markdownTable(value: string): string {
-  return value.replace(/\r?\n/g, " ").replace(/\|/g, "\\|").trim();
+  return value.replace(/\\/g, "\\\\").replace(/\r?\n/g, " ").replace(/\|/g, "\\|").trim();
 }
 
 function escapeXml(value: string): string {

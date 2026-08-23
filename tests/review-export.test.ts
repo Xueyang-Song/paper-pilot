@@ -139,6 +139,19 @@ describe("renderReviewExportPackage", () => {
     expect(svg).toContain(">2</text>");
   });
 
+  it("escapes existing backslashes before Markdown inline and table metacharacters", () => {
+    const input = exportFixture();
+    const files = renderReviewExportPackage({
+      ...input,
+      protocol: { ...input.protocol, id: "review\\archive" },
+      batches: input.batches.map((batch, index) => (index === 0 ? { ...batch, label: "Batch \\server|share" } : batch))
+    });
+    const summary = files.get("review-summary.md")!;
+
+    expect(summary).toContain("- Review ID: review\\\\archive");
+    expect(summary).toContain("| Batch \\\\server\\|share |");
+  });
+
   it("includes sorted protocol, provenance, run metadata, and audit history in JSON", () => {
     const json = renderReviewExportPackage(exportFixture()).get("review-audit.json")!;
     const parsed = JSON.parse(json) as {
