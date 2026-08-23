@@ -62,3 +62,24 @@ Use this checklist for fundamentals/stabilization passes before adding another m
 - [ ] Launch the packaged app from `release/win-unpacked`.
 - [ ] Confirm the app opens without renderer/preload bridge errors.
 - [ ] Confirm project list and settings load in the packaged app.
+
+## Phase 3 Evidence Review Acceptance
+
+- [ ] Upgrade a version-2 database and confirm projects, papers, artifacts, conversations, and messages are unchanged.
+- [ ] Activate review mode on an existing project and confirm every paper appears in the pre-existing pending queue with the historical-count warning.
+- [ ] Preview overlapping RIS and CSV files; resolve ambiguous records; confirm identified, invalid, duplicate, merged, and new counts match provenance.
+- [ ] Confirm a same-title-only match is never merged automatically.
+- [ ] Make title/abstract decisions with the keyboard and confirm only inclusions reach full-text screening.
+- [ ] Confirm a full-text exclusion cannot be saved without a criterion or custom reason and does not change reading status.
+- [ ] Attach or fetch a PDF and confirm trusted chunks are linked to the correct paper.
+- [ ] Run a 25-paper Ollama review batch; stop it; confirm completed items remain and Retry processes only cancelled/failed items.
+- [ ] Repeat with a hosted provider after the paid-model warning and confirm no credentials or raw payloads appear in events/audit data.
+- [ ] Return malformed AI JSON twice and confirm one repair attempt followed by a failed item with no saved suggestion.
+- [ ] Confirm a paper without indexed full text receives no purported full-text or extraction answer.
+- [ ] Revise the protocol and confirm decisions remain, AI suggestions become stale, and selected decisions can be marked for re-review.
+- [ ] Confirm AI-derived extraction values cannot be confirmed without valid same-paper evidence; manual values show the no-evidence label.
+- [ ] Delete a cited paper/artifact and confirm evidence snapshots, locators, decisions, and audit events remain readable.
+- [ ] Duplicate and export/import a reviewed project; compare protocol versions, provenance, decisions, extraction state, evidence, runs, and audit history.
+- [ ] Export the review package and trace every flow count and matrix row to stored provenance and human decisions.
+- [ ] Confirm the SVG is labeled “Review flow” and does not claim PRISMA compliance.
+- [ ] Run `npm run verify` on Ubuntu and `npm run verify:platform` on Windows.

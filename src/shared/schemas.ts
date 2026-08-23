@@ -16,6 +16,11 @@ export const sourceIdSchema = z.enum([
 ]);
 export type SourceId = z.infer<typeof sourceIdSchema>;
 
+// Paper provenance includes file-based imports, while crawl configuration and
+// source definitions intentionally remain limited to actual crawler sources.
+export const paperSourceIdSchema = sourceIdSchema.or(z.literal("reference-import"));
+export type PaperSourceId = z.infer<typeof paperSourceIdSchema>;
+
 export const paperScoreSchema = z.object({
   overall: z.number().min(0).max(100),
   label: z.enum(["excellent", "strong", "solid", "emerging", "limited"]),
@@ -48,7 +53,7 @@ export const paperSchema = z.object({
   doi: z.string().optional(),
   url: z.string().url().optional(),
   pdfUrl: z.string().url().optional(),
-  source: sourceIdSchema,
+  source: paperSourceIdSchema,
   sourcePaperId: z.string().optional(),
   venue: z.string().optional(),
   citationCount: z.number().int().nonnegative().optional(),
@@ -540,6 +545,793 @@ export const paperUpdateSchema = z.object({
   })
 });
 export type PaperUpdate = z.infer<typeof paperUpdateSchema>;
+
+export const MAX_REFERENCE_IMPORT_BYTES = 50 * 1024 * 1024;
+export const MAX_REFERENCE_IMPORT_RECORDS = 50_000;
+export const MAX_EXTRACTION_FIELDS = 30;
+export const MAX_REVIEW_BATCH_PAPERS = 25;
+
+export const reviewTemplateSchema = z.enum(["blank", "general-empirical", "pico"]);
+export type ReviewTemplate = z.infer<typeof reviewTemplateSchema>;
+
+export const screeningStageSchema = z.enum(["title-abstract", "full-text"]);
+export type ScreeningStage = z.infer<typeof screeningStageSchema>;
+
+export const reviewStageSchema = z.enum(["title-abstract", "full-text", "extraction"]);
+export type ReviewStage = z.infer<typeof reviewStageSchema>;
+
+export const reviewCriterionTypeSchema = z.enum(["inclusion", "exclusion"]);
+export type ReviewCriterionType = z.infer<typeof reviewCriterionTypeSchema>;
+
+export const reviewCriterionSchema = z.object({
+  id: z.string(),
+  stage: screeningStageSchema,
+  type: reviewCriterionTypeSchema,
+  label: z.string().trim().min(1).max(240),
+  description: z.string().trim().max(2_000).optional(),
+  order: z.number().int().nonnegative()
+});
+export type ReviewCriterion = z.infer<typeof reviewCriterionSchema>;
+
+export const reviewProtocolRevisionSchema = z.object({
+  id: z.string(),
+  reviewId: z.string(),
+  version: z.number().int().positive(),
+  researchQuestion: z.string().trim().max(2_000),
+  objectives: z.array(z.string().trim().min(1).max(1_000)).max(50).default([]),
+  criteria: z.array(reviewCriterionSchema).max(100).default([]),
+  changeNote: z.string().trim().max(2_000).optional(),
+  createdAt: z.string()
+});
+export type ReviewProtocolRevision = z.infer<typeof reviewProtocolRevisionSchema>;
+
+export const reviewProtocolSchema = z.object({
+  id: z.string(),
+  projectId: z.string(),
+  template: reviewTemplateSchema,
+  currentRevisionId: z.string(),
+  currentRevisionNumber: z.number().int().positive(),
+  historicalCountsAvailable: z.boolean(),
+  activatedAt: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string()
+});
+export type ReviewProtocol = z.infer<typeof reviewProtocolSchema>;
+
+export const discoveryBatchKindSchema = z.enum(["pre-existing", "reference-import", "crawl"]);
+export type DiscoveryBatchKind = z.infer<typeof discoveryBatchKindSchema>;
+
+export const discoveryBatchStatusSchema = z.enum(["pending", "running", "completed", "failed", "cancelled"]);
+export type DiscoveryBatchStatus = z.infer<typeof discoveryBatchStatusSchema>;
+
+export const referenceImportFormatSchema = z.enum(["ris", "bibtex", "csv"]);
+export type ReferenceImportFormat = z.infer<typeof referenceImportFormatSchema>;
+
+export const discoveryBatchCountsSchema = z.object({
+  identified: z.number().int().nonnegative().default(0),
+  filtered: z.number().int().nonnegative().default(0),
+  invalid: z.number().int().nonnegative().default(0),
+  duplicates: z.number().int().nonnegative().default(0),
+  merged: z.number().int().nonnegative().default(0),
+  newRecords: z.number().int().nonnegative().default(0)
+});
+export type DiscoveryBatchCounts = z.infer<typeof discoveryBatchCountsSchema>;
+
+export const discoveryBatchSchema = z.object({
+  id: z.string(),
+  reviewId: z.string(),
+  kind: discoveryBatchKindSchema,
+  label: z.string().trim().min(1).max(240),
+  sourceId: sourceIdSchema.optional(),
+  fileName: z.string().optional(),
+  importFormat: referenceImportFormatSchema.optional(),
+  status: discoveryBatchStatusSchema,
+  counts: discoveryBatchCountsSchema,
+  historicalCountsAvailable: z.boolean(),
+  createdAt: z.string(),
+  completedAt: z.string().optional(),
+  error: z.string().optional()
+});
+export type DiscoveryBatch = z.infer<typeof discoveryBatchSchema>;
+
+export const discoveryCandidateActionSchema = z.enum([
+  "created",
+  "duplicate",
+  "merged",
+  "kept-separate",
+  "skipped",
+  "invalid",
+  "filtered"
+]);
+export type DiscoveryCandidateAction = z.infer<typeof discoveryCandidateActionSchema>;
+
+export const discoveryCandidateSchema = z.object({
+  id: z.string(),
+  reviewId: z.string(),
+  batchId: z.string(),
+  paperId: z.string().optional(),
+  sourceRecordId: z.string().optional(),
+  title: z.string().optional(),
+  doi: z.string().optional(),
+  action: discoveryCandidateActionSchema,
+  createdAt: z.string()
+});
+export type DiscoveryCandidate = z.infer<typeof discoveryCandidateSchema>;
+
+export const screeningDecisionValueSchema = z.enum(["include", "exclude", "uncertain"]);
+export type ScreeningDecisionValue = z.infer<typeof screeningDecisionValueSchema>;
+
+const screeningDecisionShape = {
+  reviewId: z.string(),
+  paperId: z.string(),
+  stage: screeningStageSchema,
+  decision: screeningDecisionValueSchema,
+  protocolRevisionId: z.string(),
+  reasonCriterionId: z.string().optional(),
+  customReason: z.string().trim().max(2_000).optional(),
+  runItemId: z.string().optional()
+};
+
+function validateScreeningDecision(
+  decision: {
+    stage: ScreeningStage;
+    decision: ScreeningDecisionValue;
+    reasonCriterionId?: string;
+    customReason?: string;
+  },
+  context: z.RefinementCtx
+): void {
+  if (
+    decision.stage === "full-text" &&
+    decision.decision === "exclude" &&
+    !decision.reasonCriterionId &&
+    !decision.customReason?.trim()
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["customReason"],
+      message: "Full-text exclusions require a criterion or custom reason"
+    });
+  }
+}
+
+export const screeningDecisionSchema = z
+  .object({
+    id: z.string(),
+    ...screeningDecisionShape,
+    previousDecisionId: z.string().optional(),
+    createdAt: z.string()
+  })
+  .superRefine(validateScreeningDecision);
+export type ScreeningDecision = z.infer<typeof screeningDecisionSchema>;
+
+export const extractionFieldTypeSchema = z.enum([
+  "short-text",
+  "long-text",
+  "number",
+  "boolean",
+  "single-select",
+  "multi-select"
+]);
+export type ExtractionFieldType = z.infer<typeof extractionFieldTypeSchema>;
+
+export const extractionFieldSchema = z
+  .object({
+    id: z.string(),
+    reviewId: z.string(),
+    name: z.string().trim().min(1).max(240),
+    description: z.string().trim().max(2_000).optional(),
+    type: extractionFieldTypeSchema,
+    options: z.array(z.string().trim().min(1).max(240)).max(100).default([]),
+    order: z.number().int().nonnegative(),
+    revision: z.number().int().positive(),
+    active: z.boolean().default(true),
+    createdAt: z.string(),
+    updatedAt: z.string()
+  })
+  .superRefine((field, context) => {
+    const isSelect = field.type === "single-select" || field.type === "multi-select";
+    if (isSelect && field.options.length === 0) {
+      context.addIssue({
+        code: "custom",
+        path: ["options"],
+        message: "Select fields require at least one option"
+      });
+    }
+    if (!isSelect && field.options.length > 0) {
+      context.addIssue({
+        code: "custom",
+        path: ["options"],
+        message: "Only select fields may define options"
+      });
+    }
+    if (new Set(field.options).size !== field.options.length) {
+      context.addIssue({ code: "custom", path: ["options"], message: "Field options must be unique" });
+    }
+  });
+export type ExtractionField = z.infer<typeof extractionFieldSchema>;
+
+export const extractionPrimitiveValueSchema = z.union([
+  z.string(),
+  z.number(),
+  z.boolean(),
+  z.array(z.string()),
+  z.null()
+]);
+export type ExtractionPrimitiveValue = z.infer<typeof extractionPrimitiveValueSchema>;
+
+export function isBlankExtractionValue(value: ExtractionPrimitiveValue): boolean {
+  return (
+    value === null ||
+    (typeof value === "string" && value.trim().length === 0) ||
+    (Array.isArray(value) && !value.length)
+  );
+}
+
+export const extractionValueStatusSchema = z.enum(["suggested", "confirmed", "rejected", "not-found", "needs-review"]);
+export type ExtractionValueStatus = z.infer<typeof extractionValueStatusSchema>;
+
+export const extractionValueOriginSchema = z.enum(["manual", "ai"]);
+export type ExtractionValueOrigin = z.infer<typeof extractionValueOriginSchema>;
+
+export const extractionValueSchema = z
+  .object({
+    id: z.string(),
+    reviewId: z.string(),
+    paperId: z.string(),
+    fieldId: z.string(),
+    fieldRevision: z.number().int().positive(),
+    value: extractionPrimitiveValueSchema,
+    status: extractionValueStatusSchema,
+    origin: extractionValueOriginSchema,
+    evidenceIds: z.array(z.string()).default([]),
+    runItemId: z.string().optional(),
+    createdAt: z.string(),
+    updatedAt: z.string(),
+    confirmedAt: z.string().optional()
+  })
+  .superRefine((value, context) => {
+    if (value.status === "not-found" && value.value !== null) {
+      context.addIssue({ code: "custom", path: ["value"], message: "Not-found values must be null" });
+    }
+    if (value.status === "confirmed" && isBlankExtractionValue(value.value)) {
+      context.addIssue({
+        code: "custom",
+        path: ["value"],
+        message: "Confirmed extraction values cannot be blank; use Not found instead"
+      });
+    }
+    if (value.origin === "ai" && value.status === "confirmed" && value.evidenceIds.length === 0) {
+      context.addIssue({
+        code: "custom",
+        path: ["evidenceIds"],
+        message: "Confirmed AI values require evidence"
+      });
+    }
+  });
+export type ExtractionValue = z.infer<typeof extractionValueSchema>;
+
+export const reviewEvidenceSourceTypeSchema = z.enum(["paper-metadata", "paper-abstract", "artifact-chunk"]);
+export type ReviewEvidenceSourceType = z.infer<typeof reviewEvidenceSourceTypeSchema>;
+
+export const reviewEvidenceSchema = z.object({
+  id: z.string(),
+  reviewId: z.string(),
+  evidenceId: z.string().trim().min(1),
+  runId: z.string().optional(),
+  runItemId: z.string().optional(),
+  paperId: z.string().optional(),
+  artifactId: z.string().optional(),
+  chunkId: z.string().optional(),
+  sourceType: reviewEvidenceSourceTypeSchema,
+  title: z.string().trim().min(1),
+  excerpt: z.string().trim().min(1),
+  locator: z.string().optional(),
+  page: z.number().int().positive().optional(),
+  doi: z.string().optional(),
+  url: z.string().url().optional(),
+  retrievalScore: z.number().optional(),
+  createdAt: z.string()
+});
+export type ReviewEvidence = z.infer<typeof reviewEvidenceSchema>;
+
+export const reviewDecisionStateSchema = screeningDecisionValueSchema.or(z.literal("pending"));
+export type ReviewDecisionState = z.infer<typeof reviewDecisionStateSchema>;
+
+export const reviewPaperExtractionProgressSchema = z.object({
+  total: z.number().int().nonnegative(),
+  confirmed: z.number().int().nonnegative(),
+  needsReview: z.number().int().nonnegative()
+});
+export type ReviewPaperExtractionProgress = z.infer<typeof reviewPaperExtractionProgressSchema>;
+
+export const reviewPaperSummarySchema = z.object({
+  reviewId: z.string(),
+  paperId: z.string(),
+  title: z.string(),
+  authors: z.array(z.string()).default([]),
+  abstract: z.string().optional(),
+  year: z.number().int().optional(),
+  venue: z.string().optional(),
+  doi: z.string().optional(),
+  source: paperSourceIdSchema,
+  discoveryBatchIds: z.array(z.string()).default([]),
+  hasFullText: z.boolean(),
+  titleAbstractDecision: screeningDecisionSchema.optional(),
+  fullTextDecision: screeningDecisionSchema.optional(),
+  extractionProgress: reviewPaperExtractionProgressSchema,
+  needsReReview: z.boolean().default(false),
+  aiSuggestionStale: z.boolean().default(false)
+});
+export type ReviewPaperSummary = z.infer<typeof reviewPaperSummarySchema>;
+
+export const reviewPaperSchema = reviewPaperSummarySchema.extend({
+  paper: paperSchema
+});
+export type ReviewPaper = z.infer<typeof reviewPaperSchema>;
+
+export const reviewFullTextFilterSchema = z.enum(["any", "available", "missing"]);
+export type ReviewFullTextFilter = z.infer<typeof reviewFullTextFilterSchema>;
+
+export const reviewPaperQuerySchema = z
+  .object({
+    reviewId: z.string(),
+    stage: reviewStageSchema.default("title-abstract"),
+    search: z.string().trim().max(500).optional(),
+    sources: z.array(paperSourceIdSchema).default([]),
+    yearFrom: z.number().int().min(1500).max(3000).optional(),
+    yearTo: z.number().int().min(1500).max(3000).optional(),
+    decisions: z.array(reviewDecisionStateSchema).default([]),
+    fullText: reviewFullTextFilterSchema.default("any"),
+    needsReReview: z.boolean().optional(),
+    sort: z.enum(["title", "year", "created"]).default("created"),
+    direction: z.enum(["asc", "desc"]).default("asc"),
+    page: z.number().int().positive().default(1),
+    pageSize: z.number().int().positive().max(100).default(25)
+  })
+  .refine((query) => query.yearFrom === undefined || query.yearTo === undefined || query.yearFrom <= query.yearTo, {
+    path: ["yearTo"],
+    message: "yearTo must be greater than or equal to yearFrom"
+  });
+export type ReviewPaperQuery = z.infer<typeof reviewPaperQuerySchema>;
+
+export const reviewPaperPageSchema = z.object({
+  items: z.array(reviewPaperSummarySchema),
+  page: z.number().int().positive(),
+  pageSize: z.number().int().positive(),
+  total: z.number().int().nonnegative(),
+  totalPages: z.number().int().nonnegative(),
+  counts: z.object({
+    pending: z.number().int().nonnegative(),
+    include: z.number().int().nonnegative(),
+    exclude: z.number().int().nonnegative(),
+    uncertain: z.number().int().nonnegative()
+  })
+});
+export type ReviewPaperPage = z.infer<typeof reviewPaperPageSchema>;
+
+export const reviewRunStageSchema = reviewStageSchema;
+export type ReviewRunStage = z.infer<typeof reviewRunStageSchema>;
+
+export const reviewRunStatusSchema = z.enum(["queued", "running", "completed", "partial", "cancelled", "failed"]);
+export type ReviewRunStatus = z.infer<typeof reviewRunStatusSchema>;
+
+export const reviewRunItemStatusSchema = z.enum(["queued", "running", "completed", "failed", "cancelled"]);
+export type ReviewRunItemStatus = z.infer<typeof reviewRunItemStatusSchema>;
+
+export const reviewExtractionSuggestionSchema = z
+  .object({
+    fieldId: z.string(),
+    value: extractionPrimitiveValueSchema,
+    status: z.enum(["suggested", "not-found", "needs-review"]),
+    evidenceIds: z.array(z.string()).default([]),
+    rationale: z.string().optional()
+  })
+  .superRefine((suggestion, context) => {
+    if (suggestion.status === "suggested" && isBlankExtractionValue(suggestion.value)) {
+      context.addIssue({ code: "custom", path: ["value"], message: "Suggested values cannot be blank" });
+    }
+    if (suggestion.status === "suggested" && !suggestion.evidenceIds.length) {
+      context.addIssue({
+        code: "custom",
+        path: ["evidenceIds"],
+        message: "Suggested AI values require evidence"
+      });
+    }
+    if (suggestion.status !== "suggested" && suggestion.value !== null) {
+      context.addIssue({
+        code: "custom",
+        path: ["value"],
+        message: "Not-found and unclear suggestions cannot contain a value"
+      });
+    }
+  });
+export type ReviewExtractionSuggestion = z.infer<typeof reviewExtractionSuggestionSchema>;
+
+export const reviewCriterionAssessmentSchema = z.object({
+  criterionId: z.string(),
+  assessment: z.enum(["met", "not-met", "unclear"]),
+  explanation: z.string().trim().min(1).max(2_000),
+  evidenceIds: z.array(z.string()).max(12).default([])
+});
+export type ReviewCriterionAssessment = z.infer<typeof reviewCriterionAssessmentSchema>;
+
+export const reviewRunItemSchema = z.object({
+  id: z.string(),
+  runId: z.string(),
+  paperId: z.string(),
+  status: reviewRunItemStatusSchema,
+  attemptCount: z.number().int().nonnegative(),
+  suggestedDecision: screeningDecisionValueSchema.optional(),
+  suggestedReasonCriterionId: z.string().optional(),
+  suggestedCustomReason: z.string().optional(),
+  rationale: z.string().optional(),
+  criterionAssessments: z.array(reviewCriterionAssessmentSchema).default([]),
+  extractionSuggestions: z.array(reviewExtractionSuggestionSchema).default([]),
+  evidence: z.array(reviewEvidenceSchema).default([]),
+  stale: z.boolean().default(false),
+  error: z.string().optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  startedAt: z.string().optional(),
+  completedAt: z.string().optional()
+});
+export type ReviewRunItem = z.infer<typeof reviewRunItemSchema>;
+
+export const reviewRunSchema = z.object({
+  id: z.string(),
+  reviewId: z.string(),
+  stage: reviewRunStageSchema,
+  provider: aiProviderSchema,
+  model: z.string().trim().min(1),
+  protocolRevisionId: z.string(),
+  status: reviewRunStatusSchema,
+  paperIds: z.array(z.string()).min(1).max(MAX_REVIEW_BATCH_PAPERS),
+  fieldIds: z.array(z.string()).max(MAX_EXTRACTION_FIELDS).default([]),
+  completedCount: z.number().int().nonnegative().default(0),
+  failedCount: z.number().int().nonnegative().default(0),
+  cancelledCount: z.number().int().nonnegative().default(0),
+  error: z.string().optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  startedAt: z.string().optional(),
+  completedAt: z.string().optional()
+});
+export type ReviewRun = z.infer<typeof reviewRunSchema>;
+
+export const reviewRunEventSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("status"),
+    runId: z.string(),
+    reviewId: z.string(),
+    status: reviewRunStatusSchema
+  }),
+  z.object({
+    type: z.literal("progress"),
+    runId: z.string(),
+    reviewId: z.string(),
+    completed: z.number().int().nonnegative(),
+    failed: z.number().int().nonnegative(),
+    cancelled: z.number().int().nonnegative(),
+    total: z.number().int().nonnegative(),
+    currentPaperId: z.string().optional()
+  }),
+  z.object({
+    type: z.literal("item"),
+    runId: z.string(),
+    reviewId: z.string(),
+    item: reviewRunItemSchema
+  }),
+  z.object({
+    type: z.literal("complete"),
+    runId: z.string(),
+    reviewId: z.string(),
+    run: reviewRunSchema
+  }),
+  z.object({
+    type: z.literal("error"),
+    runId: z.string(),
+    reviewId: z.string(),
+    error: z.string(),
+    status: z.enum(["cancelled", "failed"])
+  })
+]);
+export type ReviewRunEvent = z.infer<typeof reviewRunEventSchema>;
+
+export const reviewAuditEventKindSchema = z.enum([
+  "review-activated",
+  "protocol-revised",
+  "decision-recorded",
+  "decision-marked-for-review",
+  "extraction-field-created",
+  "extraction-field-revised",
+  "extraction-value-confirmed",
+  "extraction-value-rejected",
+  "extraction-value-not-found",
+  "import-committed",
+  "run-started",
+  "run-cancelled",
+  "run-completed",
+  "paper-pdf-attached"
+]);
+export type ReviewAuditEventKind = z.infer<typeof reviewAuditEventKindSchema>;
+
+export const reviewAuditEventSchema = z.object({
+  id: z.string(),
+  reviewId: z.string(),
+  kind: reviewAuditEventKindSchema,
+  actor: z.enum(["user", "system", "ai"]),
+  entityType: z.string().optional(),
+  entityId: z.string().optional(),
+  payload: z.record(z.string(), z.unknown()).default({}),
+  createdAt: z.string()
+});
+export type ReviewAuditEvent = z.infer<typeof reviewAuditEventSchema>;
+
+export const reviewExtractionCompletionSchema = z.object({
+  totalCells: z.number().int().nonnegative(),
+  confirmedCells: z.number().int().nonnegative(),
+  notFoundCells: z.number().int().nonnegative(),
+  needsReviewCells: z.number().int().nonnegative(),
+  completionPercent: z.number().min(0).max(100)
+});
+export type ReviewExtractionCompletion = z.infer<typeof reviewExtractionCompletionSchema>;
+
+export const reviewFlowSummarySchema = z.object({
+  reviewId: z.string(),
+  identifiedRecords: z.number().int().nonnegative(),
+  filteredRecords: z.number().int().nonnegative(),
+  invalidRecords: z.number().int().nonnegative(),
+  duplicateRecords: z.number().int().nonnegative(),
+  mergedRecords: z.number().int().nonnegative(),
+  newRecords: z.number().int().nonnegative(),
+  uniqueRecordsScreened: z.number().int().nonnegative(),
+  titleAbstractExclusions: z.number().int().nonnegative(),
+  fullTextsSought: z.number().int().nonnegative(),
+  fullTextsUnavailable: z.number().int().nonnegative(),
+  fullTextExclusionsByReason: z.record(z.string(), z.number().int().nonnegative()),
+  includedPapers: z.number().int().nonnegative(),
+  extraction: reviewExtractionCompletionSchema,
+  historicalCountsAvailable: z.boolean(),
+  warnings: z.array(z.string()).default([]),
+  generatedAt: z.string()
+});
+export type ReviewFlowSummary = z.infer<typeof reviewFlowSummarySchema>;
+
+export const referenceRecordSchema = z.object({
+  title: z.string().trim().min(1).max(2_000),
+  authors: z.array(z.string().trim().min(1)).default([]),
+  abstract: z.string().optional(),
+  year: z.number().int().min(1500).max(3000).optional(),
+  doi: z.string().optional(),
+  url: z.string().url().optional(),
+  pdfUrl: z.string().url().optional(),
+  venue: z.string().optional(),
+  sourceId: z.string().optional(),
+  sourceAuthority: z.string().optional(),
+  citationCount: z.number().int().nonnegative().optional()
+});
+export type ReferenceRecord = z.infer<typeof referenceRecordSchema>;
+
+export const referenceImportFieldSchema = z.enum([
+  "title",
+  "authors",
+  "abstract",
+  "year",
+  "doi",
+  "url",
+  "pdfUrl",
+  "venue",
+  "sourceId",
+  "sourceAuthority",
+  "citationCount"
+]);
+export type ReferenceImportField = z.infer<typeof referenceImportFieldSchema>;
+
+export const referenceImportMappingSchema = z.object({
+  title: z.string().min(1),
+  authors: z.string().optional(),
+  abstract: z.string().optional(),
+  year: z.string().optional(),
+  doi: z.string().optional(),
+  url: z.string().optional(),
+  pdfUrl: z.string().optional(),
+  venue: z.string().optional(),
+  sourceId: z.string().optional(),
+  sourceAuthority: z.string().optional(),
+  citationCount: z.string().optional()
+});
+export type ReferenceImportMapping = z.infer<typeof referenceImportMappingSchema>;
+
+export const referenceImportMatchSchema = z.object({
+  kind: z.enum(["none", "exact", "ambiguous"]),
+  matchedBy: z.enum(["doi", "source-id", "fingerprint"]).optional(),
+  paperId: z.string().optional(),
+  candidatePaperIds: z.array(z.string()).default([])
+});
+export type ReferenceImportMatch = z.infer<typeof referenceImportMatchSchema>;
+
+export const referenceImportPreviewItemSchema = z.object({
+  recordIndex: z.number().int().nonnegative(),
+  record: referenceRecordSchema.optional(),
+  rawTitle: z.string().optional(),
+  valid: z.boolean(),
+  errors: z.array(z.string()).default([]),
+  match: referenceImportMatchSchema
+});
+export type ReferenceImportPreviewItem = z.infer<typeof referenceImportPreviewItemSchema>;
+
+export const referenceImportPreviewRequestSchema = z.object({
+  projectId: z.string(),
+  reviewId: z.string(),
+  format: referenceImportFormatSchema.optional()
+});
+export type ReferenceImportPreviewRequest = z.infer<typeof referenceImportPreviewRequestSchema>;
+
+export const referenceImportPreviewSchema = z.object({
+  previewId: z.string(),
+  projectId: z.string(),
+  reviewId: z.string(),
+  fileName: z.string(),
+  format: referenceImportFormatSchema,
+  sizeBytes: z.number().int().nonnegative().max(MAX_REFERENCE_IMPORT_BYTES),
+  totalRecords: z.number().int().nonnegative().max(MAX_REFERENCE_IMPORT_RECORDS),
+  validRecords: z.number().int().nonnegative(),
+  invalidRecords: z.number().int().nonnegative(),
+  columns: z.array(z.string()).default([]),
+  suggestedMapping: referenceImportMappingSchema.partial().optional(),
+  items: z.array(referenceImportPreviewItemSchema),
+  warnings: z.array(z.string()).default([])
+});
+export type ReferenceImportPreview = z.infer<typeof referenceImportPreviewSchema>;
+
+export const referenceImportResolutionSchema = z
+  .object({
+    recordIndex: z.number().int().nonnegative(),
+    action: z.enum(["keep-separate", "merge", "skip"]),
+    paperId: z.string().optional()
+  })
+  .refine((resolution) => resolution.action !== "merge" || Boolean(resolution.paperId), {
+    path: ["paperId"],
+    message: "Merge resolutions require a paper ID"
+  });
+export type ReferenceImportResolution = z.infer<typeof referenceImportResolutionSchema>;
+
+export const referenceImportCommitRequestSchema = z.object({
+  projectId: z.string(),
+  reviewId: z.string(),
+  previewId: z.string(),
+  mapping: referenceImportMappingSchema.optional(),
+  resolutions: z.array(referenceImportResolutionSchema).max(MAX_REFERENCE_IMPORT_RECORDS).default([])
+});
+export type ReferenceImportCommitRequest = z.infer<typeof referenceImportCommitRequestSchema>;
+
+export const referenceImportCommitResponseSchema = z.object({
+  batch: discoveryBatchSchema,
+  counts: discoveryBatchCountsSchema
+});
+export type ReferenceImportCommitResponse = z.infer<typeof referenceImportCommitResponseSchema>;
+
+export const activateReviewRequestSchema = z.object({
+  projectId: z.string(),
+  template: reviewTemplateSchema.default("blank"),
+  researchQuestion: z.string().trim().max(2_000).default(""),
+  objectives: z.array(z.string().trim().min(1).max(1_000)).max(50).default([]),
+  criteria: z.array(reviewCriterionSchema).max(100).default([])
+});
+export type ActivateReviewRequest = z.infer<typeof activateReviewRequestSchema>;
+
+export const reviseReviewProtocolRequestSchema = z.object({
+  reviewId: z.string(),
+  expectedVersion: z.number().int().positive(),
+  researchQuestion: z.string().trim().max(2_000),
+  objectives: z.array(z.string().trim().min(1).max(1_000)).max(50).default([]),
+  criteria: z.array(reviewCriterionSchema).max(100).default([]),
+  changeNote: z.string().trim().max(2_000).optional()
+});
+export type ReviseReviewProtocolRequest = z.infer<typeof reviseReviewProtocolRequestSchema>;
+
+export const saveScreeningDecisionRequestSchema = z
+  .object(screeningDecisionShape)
+  .superRefine(validateScreeningDecision);
+export type SaveScreeningDecisionRequest = z.infer<typeof saveScreeningDecisionRequestSchema>;
+
+export const markReviewPapersForReviewRequestSchema = z.object({
+  reviewId: z.string(),
+  paperIds: z.array(z.string()).min(1).max(500),
+  stage: screeningStageSchema.optional()
+});
+export type MarkReviewPapersForReviewRequest = z.infer<typeof markReviewPapersForReviewRequestSchema>;
+
+export const upsertExtractionFieldRequestSchema = z
+  .object({
+    reviewId: z.string(),
+    fieldId: z.string().optional(),
+    expectedRevision: z.number().int().positive().optional(),
+    name: z.string().trim().min(1).max(240),
+    description: z.string().trim().max(2_000).optional(),
+    type: extractionFieldTypeSchema,
+    options: z.array(z.string().trim().min(1).max(240)).max(100).default([]),
+    order: z.number().int().nonnegative()
+  })
+  .superRefine((field, context) => {
+    const isSelect = field.type === "single-select" || field.type === "multi-select";
+    if (isSelect && field.options.length === 0) {
+      context.addIssue({
+        code: "custom",
+        path: ["options"],
+        message: "Select fields require at least one option"
+      });
+    }
+    if (!isSelect && field.options.length > 0) {
+      context.addIssue({
+        code: "custom",
+        path: ["options"],
+        message: "Only select fields may define options"
+      });
+    }
+  });
+export type UpsertExtractionFieldRequest = z.infer<typeof upsertExtractionFieldRequestSchema>;
+
+export const reorderExtractionFieldsRequestSchema = z.object({
+  reviewId: z.string(),
+  fieldIds: z.array(z.string()).max(MAX_EXTRACTION_FIELDS)
+});
+export type ReorderExtractionFieldsRequest = z.infer<typeof reorderExtractionFieldsRequestSchema>;
+
+export const saveExtractionValueRequestSchema = z
+  .object({
+    reviewId: z.string(),
+    paperId: z.string(),
+    fieldId: z.string(),
+    expectedFieldRevision: z.number().int().positive(),
+    value: extractionPrimitiveValueSchema,
+    status: z.enum(["confirmed", "rejected", "not-found", "needs-review"]),
+    evidenceIds: z.array(z.string()).default([])
+  })
+  .superRefine((value, context) => {
+    if (value.status === "not-found" && value.value !== null) {
+      context.addIssue({ code: "custom", path: ["value"], message: "Not-found values must be null" });
+    }
+    if (value.status === "confirmed" && isBlankExtractionValue(value.value)) {
+      context.addIssue({
+        code: "custom",
+        path: ["value"],
+        message: "Confirmed extraction values cannot be blank; use Not found instead"
+      });
+    }
+  });
+export type SaveExtractionValueRequest = z.infer<typeof saveExtractionValueRequestSchema>;
+
+export const startReviewRunRequestSchema = z.object({
+  reviewId: z.string(),
+  stage: reviewRunStageSchema,
+  paperIds: z.array(z.string()).min(1).max(MAX_REVIEW_BATCH_PAPERS),
+  fieldIds: z.array(z.string()).max(MAX_EXTRACTION_FIELDS).optional()
+});
+export type StartReviewRunRequest = z.infer<typeof startReviewRunRequestSchema>;
+
+export const cancelReviewRunRequestSchema = z.object({ runId: z.string() });
+export type CancelReviewRunRequest = z.infer<typeof cancelReviewRunRequestSchema>;
+
+export const retryReviewRunRequestSchema = z.object({ runId: z.string() });
+export type RetryReviewRunRequest = z.infer<typeof retryReviewRunRequestSchema>;
+
+export const fetchReviewPaperFullTextRequestSchema = z.object({
+  projectId: z.string(),
+  reviewId: z.string(),
+  paperId: z.string()
+});
+export type FetchReviewPaperFullTextRequest = z.infer<typeof fetchReviewPaperFullTextRequestSchema>;
+
+export const attachReviewPaperPdfRequestSchema = fetchReviewPaperFullTextRequestSchema;
+export type AttachReviewPaperPdfRequest = z.infer<typeof attachReviewPaperPdfRequestSchema>;
+
+export const getReviewSummaryRequestSchema = z.object({ reviewId: z.string() });
+export type GetReviewSummaryRequest = z.infer<typeof getReviewSummaryRequestSchema>;
+
+export const exportReviewRequestSchema = z.object({ reviewId: z.string() });
+export type ExportReviewRequest = z.infer<typeof exportReviewRequestSchema>;
 
 export function normalizeTitle(title: string): string {
   return title

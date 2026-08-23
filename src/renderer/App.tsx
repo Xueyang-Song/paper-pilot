@@ -7,8 +7,10 @@ import { ArtifactPanel, ArtifactViewerModal } from "./components/artifacts";
 import { ChatWorkspace } from "./components/chat-workspace";
 import { JobDrawer } from "./components/job-drawer";
 import { ProjectRail } from "./components/project-rail";
+import { ReviewWorkspace } from "./components/review-workspace";
 import { SearchPanel } from "./components/search-panel";
 import { SettingsPanel } from "./components/settings-panel";
+import { Button } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { WindowTitleBar } from "./components/window-title-bar";
@@ -36,6 +38,7 @@ export function App(): JSX.Element {
   const [viewerArtifactId, setViewerArtifactId] = useState<string | undefined>(undefined);
   const [viewerHighlightQuery, setViewerHighlightQuery] = useState("");
   const [viewerSearchPage, setViewerSearchPage] = useState<number | undefined>(undefined);
+  const [workspaceMode, setWorkspaceMode] = useState<"chat" | "review">("chat");
   const queryClient = useQueryClient();
 
   const projectsQuery = useQuery({
@@ -204,28 +207,62 @@ export function App(): JSX.Element {
           onImport={() => importProject.mutateAsync()}
         />
         <section className="relative flex min-h-0 min-w-0 flex-col border-l border-border bg-card">
-          <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(300px,340px)] overflow-hidden">
-            <ChatWorkspace
-              bundle={activeBundle}
-              activeProjectId={activeProjectId}
-              currentArtifactId={viewerArtifactId}
+          <div className="flex h-11 shrink-0 items-center justify-center border-b border-border bg-background/80 px-4">
+            <div className="flex rounded-lg bg-muted p-0.5" role="tablist" aria-label="Project workspace">
+              <Button
+                role="tab"
+                aria-selected={workspaceMode === "chat"}
+                variant={workspaceMode === "chat" ? "secondary" : "ghost"}
+                size="sm"
+                onClick={() => setWorkspaceMode("chat")}
+              >
+                Chat
+              </Button>
+              <Button
+                role="tab"
+                aria-selected={workspaceMode === "review"}
+                variant={workspaceMode === "review" ? "secondary" : "ghost"}
+                size="sm"
+                onClick={() => setWorkspaceMode("review")}
+              >
+                Review
+              </Button>
+            </div>
+          </div>
+          {workspaceMode === "chat" ? (
+            <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(300px,340px)] overflow-hidden">
+              <ChatWorkspace
+                bundle={activeBundle}
+                activeProjectId={activeProjectId}
+                currentArtifactId={viewerArtifactId}
+                onOpenArtifact={(artifactId, page) => {
+                  setViewerHighlightQuery("");
+                  setViewerSearchPage(page);
+                  setViewerArtifactId(artifactId);
+                }}
+              />
+              <ArtifactPanel
+                projectId={activeProjectId}
+                artifacts={artifacts}
+                papers={activeBundle?.papers ?? []}
+                onOpenArtifact={(artifactId) => {
+                  setViewerHighlightQuery("");
+                  setViewerSearchPage(undefined);
+                  setViewerArtifactId(artifactId);
+                }}
+              />
+            </div>
+          ) : (
+            <ReviewWorkspace
+              projectId={activeProjectId}
+              projectTitle={activeBundle?.project.title}
               onOpenArtifact={(artifactId, page) => {
                 setViewerHighlightQuery("");
                 setViewerSearchPage(page);
                 setViewerArtifactId(artifactId);
               }}
             />
-            <ArtifactPanel
-              projectId={activeProjectId}
-              artifacts={artifacts}
-              papers={activeBundle?.papers ?? []}
-              onOpenArtifact={(artifactId) => {
-                setViewerHighlightQuery("");
-                setViewerSearchPage(undefined);
-                setViewerArtifactId(artifactId);
-              }}
-            />
-          </div>
+          )}
           <JobDrawer projectId={activeProjectId} initialJobs={activeBundle?.jobs ?? []} />
         </section>
       </div>
