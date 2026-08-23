@@ -94,6 +94,21 @@ Simultaneously queries **8+ academic databases**:
 
 </td>
 </tr>
+<tr>
+<td colspan="2">
+
+### 🔬 Auditable Evidence Review
+
+- Versioned protocols with separate title/abstract and full-text screening
+- Previewed RIS, BibTeX, and mapped CSV imports with conservative deduplication
+- Typed, evidence-linked extraction matrix and append-only decision history
+- Provider-neutral, on-demand AI suggestions that require human confirmation
+- Deterministic review-flow summary and traceable export package
+
+See the [evidence review guide](docs/evidence-review.md).
+
+</td>
+</tr>
 </table>
 
 ---
@@ -186,6 +201,7 @@ This is an **early v1** — buildable, test-covered, but still hardening for pro
 | SQLite + FTS5 + vector search                     | ✅ Stable       |
 | AI agent (Ollama / OpenAI-compatible)             | ✅ Stable       |
 | Evidence-grounded multi-chat research workspace   | ✅ Stable       |
+| Auditable evidence review workspace               | ✅ Stable       |
 | Google Scholar crawler                            | ⚠️ Experimental |
 | macOS / Linux packaging                           | ⚠️ Untested     |
 | Cloud sync / collaboration                        | ❌ Not planned  |

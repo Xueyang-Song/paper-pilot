@@ -3,7 +3,6 @@ import {
   type CrawlConfig,
   crawlConfigSchema,
   type Paper,
-  paperDedupeKey,
   type SourceDiagnostic,
   type SourceId
 } from "../../shared/schemas.js";
@@ -17,7 +16,9 @@ import type { FullTextService } from "./full-text-service.js";
 import type { JobQueue } from "./job-queue.js";
 import type { PaperScoringService } from "./paper-scoring-service.js";
 import type { SettingsService } from "./settings-service.js";
+import { mergeAuthoritativeSourceIdentifiers, PaperIdentityResolver } from "./paper-identity.js";
 import { requiresApproval } from "./policy.js";
+import { id } from "../utils.js";
 
 export interface CrawlRunResult {
   jobId: string;
@@ -46,9 +47,11 @@ export class CrawlService {
   ): Promise<CrawlRunResult> {
     const project = this.db.getProject(projectId);
     if (!project) throw new Error(`Project not found: ${projectId}`);
+    const activeReview = this.db.getReview(projectId);
     let config = crawlConfigSchema.parse({
       topic: project.topic ?? input.topic ?? "scientific literature",
       ...input,
+      openAccessOnly: input.openAccessOnly ?? (activeReview ? false : undefined),
       maxPapers: Math.min(input.maxPapers ?? project.policy.maxCrawlPapers, project.policy.maxCrawlPapers)
     });
     const disabledSourceIds = new Set((await this.settings?.get())?.sources.disabledSourceIds ?? []);
@@ -89,6 +92,7 @@ export class CrawlService {
     const connectorResults: Array<{ sourceId: SourceId; result?: CrawlResult; error?: string }> = [];
     const sourceDiagnostics: SourceDiagnostic[] = [];
     const saved = new Map<string, Paper>();
+    const identityResolver = new PaperIdentityResolver(this.db.listPapers(projectId));
     const sourceIds = config.sourceIds;
     const credentialMap = this.credentials.getMany(sourceIds);
 
@@ -96,6 +100,26 @@ export class CrawlService {
       const sourceId = sourceIds[index];
       const definition = this.registry.get(sourceId).definition;
       const startedAt = Date.now();
+      const discoveryBatch = activeReview
+        ? this.db.saveDiscoveryBatch({
+            reviewId: activeReview.id,
+            kind: "crawl",
+            label: `${definition.displayName}: ${config.topic}`,
+            sourceId,
+            status: "running",
+            counts: {},
+            config,
+            historicalCountsAvailable: true
+          })
+        : undefined;
+      const batchCounts = {
+        identified: 0,
+        filtered: 0,
+        invalid: 0,
+        duplicates: 0,
+        merged: 0,
+        newRecords: 0
+      };
       this.jobs.update(job.id, {
         progress: index / Math.max(sourceIds.length, 1),
         detail: `Running ${definition.displayName}`
@@ -124,10 +148,76 @@ export class CrawlService {
           attemptedUrl: diagnosticUrl(result.provenance),
           graceful: true
         });
+        batchCounts.identified = result.papers.length;
         for (const paper of result.papers) {
-          if (config.openAccessOnly && !paper.isOpenAccess && !paper.pdfUrl) continue;
-          const savedPaper = this.db.savePaper(projectId, paper);
-          saved.set(paperDedupeKey(savedPaper), savedPaper);
+          if (config.openAccessOnly && !paper.isOpenAccess && !paper.pdfUrl) {
+            batchCounts.filtered += 1;
+            if (discoveryBatch) {
+              this.db.recordReviewCandidateOrigin({
+                reviewId: activeReview!.id,
+                batchId: discoveryBatch.id,
+                sourceRecordId: paper.sourcePaperId,
+                resolution: "filtered",
+                recordSnapshot: paper
+              });
+            }
+            continue;
+          }
+          const match = identityResolver.resolve(paper);
+          let savedPaper: Paper;
+          let matchedPaperId: string | undefined;
+          let resolution: "merged" | "duplicate" | "created" | "kept-separate";
+          if (match.kind === "exact") {
+            matchedPaperId = match.candidate.id;
+            if (wouldEnrichPaper(match.candidate, paper)) {
+              savedPaper = this.db.updatePaper(
+                projectId,
+                match.candidate.id,
+                mergeCrawlerPaperMetadata(match.candidate, paper)
+              );
+              identityResolver.replace(match.candidate, savedPaper);
+              batchCounts.merged += 1;
+              resolution = "merged";
+            } else {
+              savedPaper = match.candidate;
+              batchCounts.duplicates += 1;
+              resolution = "duplicate";
+            }
+          } else {
+            const keptSeparate = match.kind === "ambiguous";
+            const separateId = keptSeparate ? id("paper") : paper.id;
+            savedPaper = this.db.savePaper(projectId, {
+              ...paper,
+              id: separateId,
+              raw: keptSeparate ? { ...(paper.raw ?? {}), forceSeparateIdentity: separateId } : paper.raw
+            });
+            identityResolver.add(savedPaper);
+            matchedPaperId = keptSeparate ? match.candidates[0]?.id : undefined;
+            batchCounts.newRecords += 1;
+            resolution = keptSeparate ? "kept-separate" : "created";
+          }
+          saved.set(savedPaper.id, savedPaper);
+          if (discoveryBatch) {
+            this.db.recordReviewCandidateOrigin({
+              reviewId: activeReview!.id,
+              batchId: discoveryBatch.id,
+              paperId: savedPaper.id,
+              matchedPaperId,
+              sourceRecordId: paper.sourcePaperId,
+              resolution,
+              paperSnapshot: savedPaper,
+              recordSnapshot: paper
+            });
+          }
+        }
+        if (discoveryBatch) {
+          this.db.saveDiscoveryBatch({
+            ...discoveryBatch,
+            status: "completed",
+            counts: batchCounts,
+            config,
+            completedAt: new Date().toISOString()
+          });
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -143,6 +233,16 @@ export class CrawlService {
           error: message,
           graceful: false
         });
+        if (discoveryBatch) {
+          this.db.saveDiscoveryBatch({
+            ...discoveryBatch,
+            status: "failed",
+            counts: batchCounts,
+            error: message,
+            config,
+            completedAt: new Date().toISOString()
+          });
+        }
       }
     }
 
@@ -203,7 +303,7 @@ export class CrawlService {
     this.jobs.update(job.id, {
       status: "completed",
       progress: 1,
-      detail: `Found ${papers.length} open-access papers and downloaded ${fullTextArtifacts.length} PDFs.`,
+      detail: `Retained ${papers.length} papers and downloaded ${fullTextArtifacts.length} PDFs.`,
       result: {
         paperCount: papers.length,
         artifactIds: [metadataArtifact.id, markdownArtifact.id, ...fullTextArtifacts.map((artifact) => artifact.id)]
@@ -287,6 +387,45 @@ function diagnosticUrl(provenance: Record<string, unknown> | undefined): string 
     if (typeof value === "string" && value.trim()) return value;
   }
   return undefined;
+}
+
+function wouldEnrichPaper(previous: Paper, incoming: Paper): boolean {
+  const patch = mergeCrawlerPaperMetadata(previous, incoming);
+  return (
+    (!previous.abstract && Boolean(patch.abstract)) ||
+    (!previous.authors.length && Boolean(patch.authors?.length)) ||
+    (previous.year === undefined && patch.year !== undefined) ||
+    (!previous.publishedAt && Boolean(patch.publishedAt)) ||
+    (!previous.pdfUrl && Boolean(patch.pdfUrl)) ||
+    (!previous.url && Boolean(patch.url)) ||
+    (!previous.venue && Boolean(patch.venue)) ||
+    (!previous.doi && Boolean(patch.doi)) ||
+    (patch.citationCount ?? 0) > (previous.citationCount ?? 0) ||
+    (!previous.isOpenAccess && Boolean(patch.isOpenAccess)) ||
+    (!previous.license && Boolean(patch.license)) ||
+    patch.sourcePaperId !== previous.sourcePaperId ||
+    JSON.stringify(patch.raw ?? {}) !== JSON.stringify(previous.raw ?? {})
+  );
+}
+
+function mergeCrawlerPaperMetadata(current: Paper, incoming: Paper): Partial<Paper> {
+  const identity = mergeAuthoritativeSourceIdentifiers(current, incoming);
+  return {
+    abstract: current.abstract || incoming.abstract,
+    authors: current.authors.length ? current.authors : incoming.authors,
+    year: current.year ?? incoming.year,
+    publishedAt: current.publishedAt ?? incoming.publishedAt,
+    doi: current.doi ?? incoming.doi,
+    url: current.url ?? incoming.url,
+    pdfUrl: current.pdfUrl ?? incoming.pdfUrl,
+    venue: current.venue ?? incoming.venue,
+    citationCount: Math.max(current.citationCount ?? 0, incoming.citationCount ?? 0) || undefined,
+    isOpenAccess: current.isOpenAccess || incoming.isOpenAccess,
+    license: current.license ?? incoming.license,
+    fieldsOfStudy: [...new Set([...current.fieldsOfStudy, ...incoming.fieldsOfStudy])],
+    sourcePaperId: identity.sourcePaperId,
+    raw: identity.raw
+  };
 }
 
 function googleScholarDiagnosticUrl(topic: string): string {

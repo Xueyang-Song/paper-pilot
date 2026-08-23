@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { join, dirname } from "node:path";
 import { PaperPilotDb } from "./db.js";
 import { registerIpc } from "./ipc.js";
+import { registerReviewIpc } from "./review-ipc.js";
 import { SourceRegistry } from "./sources/registry.js";
 import { AiService } from "./services/ai-service.js";
 import { ArtifactService } from "./services/artifact-service.js";
@@ -16,6 +17,8 @@ import { PaperScoringService } from "./services/paper-scoring-service.js";
 import { PythonService } from "./services/python-service.js";
 import { SearchService } from "./services/search-service.js";
 import { ResearchChatService } from "./services/research-chat-service.js";
+import { ReviewAgentService } from "./services/review-agent-service.js";
+import { ReviewImportManager } from "./services/review-import-manager.js";
 import { SettingsService } from "./services/settings-service.js";
 import { createUpdateService } from "./services/update-service.js";
 
@@ -119,6 +122,8 @@ app.whenReady().then(() => {
   );
   const ai = new AiService(db, settings, credentials, artifacts, jobs);
   const researchChat = new ResearchChatService(db, artifacts, settings, credentials, registry, crawl, ai, jobs);
+  const reviewImports = new ReviewImportManager(db);
+  const reviewAgent = new ReviewAgentService(db, settings, credentials);
   const updates = createUpdateService({
     currentVersion: app.getVersion(),
     isPackaged: app.isPackaged,
@@ -129,6 +134,7 @@ app.whenReady().then(() => {
     db,
     registry,
     researchChat,
+    reviewAgent,
     crawl,
     ai,
     artifacts,
@@ -140,6 +146,14 @@ app.whenReady().then(() => {
     search,
     updates,
     dataRoot
+  });
+  registerReviewIpc({
+    db,
+    imports: reviewImports,
+    agent: reviewAgent,
+    artifacts,
+    fullText,
+    settings
   });
   mainWindow = createWindow();
   mainWindow.on("closed", () => {

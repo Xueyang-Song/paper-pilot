@@ -1,4 +1,4 @@
-import type { Paper, PaperScore, SourceId } from "../../shared/schemas.js";
+import type { Paper, PaperScore } from "../../shared/schemas.js";
 import type { PaperPilotDb } from "../db.js";
 
 const SCORE_VERSION = "heuristic-v1";
@@ -13,7 +13,7 @@ const SCORE_WEIGHTS: PaperScore["components"] = {
   metadata: 7
 };
 
-const SOURCE_SCORES: Record<SourceId, number> = {
+const SOURCE_SCORES: Record<Paper["source"], number> = {
   openalex: 82,
   crossref: 66,
   "semantic-scholar": 78,
@@ -22,7 +22,8 @@ const SOURCE_SCORES: Record<SourceId, number> = {
   "europe-pmc": 84,
   core: 72,
   unpaywall: 64,
-  "google-scholar": 52
+  "google-scholar": 52,
+  "reference-import": 55
 };
 
 const TOP_VENUE_PATTERNS = [

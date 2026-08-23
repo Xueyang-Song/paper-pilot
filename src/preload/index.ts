@@ -5,7 +5,10 @@ import type {
   AiModelListRequest,
   AiProviderCheckRequest,
   AiProviderHealth,
+  ActivateReviewRequest,
   Artifact,
+  AttachReviewPaperPdfRequest,
+  CancelReviewRunRequest,
   ChatMode,
   ChatRun,
   ChatRunEvent,
@@ -13,22 +16,51 @@ import type {
   Conversation,
   CredentialUpsert,
   CrawlConfig,
+  DiscoveryBatch,
+  ExportReviewRequest,
+  ExtractionField,
+  ExtractionValue,
+  FetchReviewPaperFullTextRequest,
   Job,
+  MarkReviewPapersForReviewRequest,
   Message,
   Paper,
   PaperUpdate,
   Project,
   ProjectPolicy,
   ProjectUpdate,
+  ReferenceImportCommitRequest,
+  ReferenceImportCommitResponse,
+  ReferenceImportMapping,
+  ReferenceImportPreview,
+  ReferenceImportPreviewRequest,
   ReindexRequest,
   ReindexResponse,
+  ReorderExtractionFieldsRequest,
+  RetryReviewRunRequest,
+  ReviewFlowSummary,
+  ReviewEvidence,
+  ReviewPaperPage,
+  ReviewPaperQuery,
+  ReviewProtocol,
+  ReviewProtocolRevision,
+  ReviewRun,
+  ReviewRunEvent,
+  ReviewRunItem,
+  ReviseReviewProtocolRequest,
+  SaveExtractionValueRequest,
+  SaveScreeningDecisionRequest,
   SearchRequest,
   SearchResponse,
   SourceDefinition,
   StartChatRunRequest,
   StartChatRunResponse,
+  StartReviewRunRequest,
+  ScreeningDecision,
+  UpsertExtractionFieldRequest,
   UpdateStatus
 } from "../shared/schemas.js";
+import { reviewRunEventSchema } from "../shared/schemas.js";
 
 const { contextBridge, ipcRenderer } = electron;
 
@@ -53,6 +85,23 @@ export interface WindowState {
   isMaximized: boolean;
   isFocused: boolean;
   isFullScreen?: boolean;
+}
+
+export interface ReviewState {
+  protocol: ReviewProtocol;
+  revision: ReviewProtocolRevision;
+}
+
+export interface ReviewFileActionResult {
+  ok: boolean;
+  artifactId?: string;
+  warning?: string;
+}
+
+export interface ReviewExportResult {
+  ok: boolean;
+  path?: string;
+  fileCount?: number;
 }
 
 export interface PaperPilotApi {
@@ -161,6 +210,33 @@ export interface PaperPilotApi {
   retryJob(jobId: string): Promise<Job>;
   clearTerminalJobs(projectId?: string): Promise<{ cleared: number }>;
   onJobChanged(listener: (job: Job) => void): () => void;
+  getReview(projectId: string): Promise<ReviewState | undefined>;
+  activateReview(input: ActivateReviewRequest): Promise<ReviewState>;
+  listReviewProtocolRevisions(reviewId: string): Promise<ReviewProtocolRevision[]>;
+  reviseReviewProtocol(input: ReviseReviewProtocolRequest): Promise<ReviewProtocolRevision>;
+  listReviewPapers(input: ReviewPaperQuery): Promise<ReviewPaperPage>;
+  listDiscoveryBatches(reviewId: string): Promise<DiscoveryBatch[]>;
+  previewReferenceImport(input: ReferenceImportPreviewRequest): Promise<ReferenceImportPreview | undefined>;
+  remapReferenceImport(input: { previewId: string; mapping: ReferenceImportMapping }): Promise<ReferenceImportPreview>;
+  commitReferenceImport(input: ReferenceImportCommitRequest): Promise<ReferenceImportCommitResponse>;
+  saveScreeningDecision(input: SaveScreeningDecisionRequest): Promise<ScreeningDecision>;
+  markReviewPapersForReview(input: MarkReviewPapersForReviewRequest): Promise<{ ok: true; marked: number }>;
+  listExtractionFields(reviewId: string): Promise<ExtractionField[]>;
+  upsertExtractionField(input: UpsertExtractionFieldRequest): Promise<ExtractionField>;
+  reorderExtractionFields(input: ReorderExtractionFieldsRequest): Promise<ExtractionField[]>;
+  listExtractionValues(input: { reviewId: string; paperIds?: string[] }): Promise<ExtractionValue[]>;
+  listReviewEvidence(input: { reviewId: string; evidenceIds?: string[] }): Promise<ReviewEvidence[]>;
+  saveExtractionValue(input: SaveExtractionValueRequest): Promise<ExtractionValue>;
+  startReviewRun(input: StartReviewRunRequest): Promise<ReviewRun>;
+  cancelReviewRun(input: CancelReviewRunRequest): Promise<{ cancelled: boolean }>;
+  retryReviewRun(input: RetryReviewRunRequest): Promise<ReviewRun>;
+  listReviewRuns(reviewId: string): Promise<ReviewRun[]>;
+  listReviewRunItems(runId: string): Promise<ReviewRunItem[]>;
+  onReviewRunEvent(listener: (event: ReviewRunEvent) => void): () => void;
+  getReviewSummary(reviewId: string): Promise<ReviewFlowSummary>;
+  fetchReviewPaperFullText(input: FetchReviewPaperFullTextRequest): Promise<ReviewFileActionResult>;
+  attachReviewPaperPdf(input: AttachReviewPaperPdfRequest): Promise<ReviewFileActionResult>;
+  exportReview(input: ExportReviewRequest): Promise<ReviewExportResult>;
 }
 
 const api: PaperPilotApi = {
@@ -251,7 +327,39 @@ const api: PaperPilotApi = {
     const handler = (_event: Electron.IpcRendererEvent, job: Job) => listener(job);
     ipcRenderer.on("jobs:changed", handler);
     return () => ipcRenderer.off("jobs:changed", handler);
-  }
+  },
+  getReview: (projectId) => ipcRenderer.invoke("review:get", projectId),
+  activateReview: (input) => ipcRenderer.invoke("review:activate", input),
+  listReviewProtocolRevisions: (reviewId) => ipcRenderer.invoke("review:listProtocolRevisions", reviewId),
+  reviseReviewProtocol: (input) => ipcRenderer.invoke("review:reviseProtocol", input),
+  listReviewPapers: (input) => ipcRenderer.invoke("review:listPapers", input),
+  listDiscoveryBatches: (reviewId) => ipcRenderer.invoke("review:listDiscoveryBatches", reviewId),
+  previewReferenceImport: (input) => ipcRenderer.invoke("review:previewImport", input),
+  remapReferenceImport: (input) => ipcRenderer.invoke("review:remapImport", input),
+  commitReferenceImport: (input) => ipcRenderer.invoke("review:commitImport", input),
+  saveScreeningDecision: (input) => ipcRenderer.invoke("review:saveDecision", input),
+  markReviewPapersForReview: (input) => ipcRenderer.invoke("review:markForReview", input),
+  listExtractionFields: (reviewId) => ipcRenderer.invoke("review:listExtractionFields", reviewId),
+  upsertExtractionField: (input) => ipcRenderer.invoke("review:upsertExtractionField", input),
+  reorderExtractionFields: (input) => ipcRenderer.invoke("review:reorderExtractionFields", input),
+  listExtractionValues: (input) => ipcRenderer.invoke("review:listExtractionValues", input),
+  listReviewEvidence: (input) => ipcRenderer.invoke("review:listEvidence", input),
+  saveExtractionValue: (input) => ipcRenderer.invoke("review:saveExtractionValue", input),
+  startReviewRun: (input) => ipcRenderer.invoke("review:startRun", input),
+  cancelReviewRun: (input) => ipcRenderer.invoke("review:cancelRun", input),
+  retryReviewRun: (input) => ipcRenderer.invoke("review:retryRun", input),
+  listReviewRuns: (reviewId) => ipcRenderer.invoke("review:listRuns", reviewId),
+  listReviewRunItems: (runId) => ipcRenderer.invoke("review:listRunItems", runId),
+  onReviewRunEvent: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, runEvent: unknown) =>
+      listener(reviewRunEventSchema.parse(runEvent));
+    ipcRenderer.on("review:run-event", handler);
+    return () => ipcRenderer.off("review:run-event", handler);
+  },
+  getReviewSummary: (reviewId) => ipcRenderer.invoke("review:getSummary", { reviewId }),
+  fetchReviewPaperFullText: (input) => ipcRenderer.invoke("review:fetchFullText", input),
+  attachReviewPaperPdf: (input) => ipcRenderer.invoke("review:attachPdf", input),
+  exportReview: (input) => ipcRenderer.invoke("review:export", input)
 };
 
 contextBridge.exposeInMainWorld("paperPilot", api);
